@@ -12,9 +12,9 @@ export default function StatCards({ data }: Props) {
 
   const cards = [
     {
-      label: "Incidentes Simulados",
+      label: "Incidentes Reportados",
       value: totalPoints.toString(),
-      sub:   "En el sector",
+      sub:   "Fuente: datos.gov.co",
       icon:  <MapPin size={16} className="text-[#112288]" />,
       accent: "border-blue-200",
     },
