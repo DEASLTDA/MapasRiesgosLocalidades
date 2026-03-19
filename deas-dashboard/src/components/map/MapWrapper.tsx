@@ -20,9 +20,10 @@ interface Props {
   loading: boolean;
   selectedCrime: string | null;
   mapIncidents: Incidencia[];
+  hideRisks: boolean;
 }
 
-export default function MapWrapper({ data, loading, selectedCrime, mapIncidents }: Props) {
+export default function MapWrapper({ data, loading, selectedCrime, mapIncidents, hideRisks }: Props) {
   return (
     <div className="relative h-full rounded-xl overflow-hidden shadow-card border border-blue-100">
       {loading && (
@@ -33,7 +34,12 @@ export default function MapWrapper({ data, loading, selectedCrime, mapIncidents 
           </div>
         </div>
       )}
-      <DynamicMap data={data} selectedCrime={selectedCrime} mapIncidents={mapIncidents} />
+      <DynamicMap
+        data={data}
+        selectedCrime={selectedCrime}
+        mapIncidents={mapIncidents}
+        hideRisks={hideRisks}
+      />
     </div>
   );
 }
