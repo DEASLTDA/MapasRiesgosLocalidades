@@ -1,7 +1,8 @@
 "use client";
 import { useEffect } from "react";
-import { MapContainer, TileLayer, useMap, CircleMarker, Tooltip } from "react-leaflet";
+import { MapContainer, TileLayer, useMap, CircleMarker, Tooltip, Marker } from "react-leaflet";
 import type { LocalidadData } from "@/types";
+import type { Incidencia } from "@/components/bitacora/IncidenciasModule";
 import { getCrimeColor } from "@/components/charts/CrimeBarChart";
 import L from "leaflet";
 
@@ -11,6 +12,33 @@ L.Icon.Default.mergeOptions({
   iconUrl:       "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
+
+const GRAVEDAD_COLORS: Record<string, string> = {
+  crítica: "#dc2626",
+  alta:    "#ea580c",
+  media:   "#d97706",
+  baja:    "#16a34a",
+};
+
+function createIncidentIcon(gravedad: string) {
+  const color = GRAVEDAD_COLORS[gravedad] ?? "#64748b";
+  return L.divIcon({
+    html: `
+      <div style="
+        width:28px;height:28px;
+        background:${color};
+        border:3px solid white;
+        border-radius:50% 50% 50% 0;
+        transform:rotate(-45deg);
+        box-shadow:0 2px 8px rgba(0,0,0,0.35);
+      "></div>
+    `,
+    className: "",
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -28],
+  });
+}
 
 function MapController({ data }: { data: LocalidadData | null }) {
   const map = useMap();
@@ -24,14 +52,20 @@ function MapController({ data }: { data: LocalidadData | null }) {
 interface Props {
   data: LocalidadData | null;
   selectedCrime: string | null;
+  mapIncidents: Incidencia[];
 }
 
-export default function LeafletMap({ data, selectedCrime }: Props) {
+export default function LeafletMap({ data, selectedCrime, mapIncidents }: Props) {
   const initial: [number, number] = [4.6510, -74.0560];
 
   const visiblePoints = data?.points.filter((p) =>
     selectedCrime ? p.type === selectedCrime : true
   ) ?? [];
+
+  // Incidencias con coordenadas válidas
+  const incidentMarkers = mapIncidents.filter(
+    (i) => i.lat && i.lng && !isNaN(parseFloat(i.lat)) && !isNaN(parseFloat(i.lng))
+  );
 
   return (
     <MapContainer
@@ -46,12 +80,13 @@ export default function LeafletMap({ data, selectedCrime }: Props) {
       />
       <MapController data={data} />
 
+      {/* ── Puntos de delitos ── */}
       {visiblePoints.map((p, i) => {
         const cfg = getCrimeColor(p.type);
         const isFiltered = !!selectedCrime;
         return (
           <CircleMarker
-            key={`${selectedCrime ?? "all"}-${i}`}
+            key={`crime-${selectedCrime ?? "all"}-${i}`}
             center={[p.lat, p.lng]}
             radius={isFiltered ? p.intensity * 16 : p.intensity * 13}
             pathOptions={{
@@ -68,6 +103,30 @@ export default function LeafletMap({ data, selectedCrime }: Props) {
           </CircleMarker>
         );
       })}
+
+      {/* ── Íconos de incidencias registradas ── */}
+      {incidentMarkers.map((inc) => (
+        <Marker
+          key={inc.id}
+          position={[parseFloat(inc.lat), parseFloat(inc.lng)]}
+          icon={createIncidentIcon(inc.gravedad)}
+        >
+          <Tooltip direction="top" offset={[0, -28]} opacity={0.97} permanent={false}>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: GRAVEDAD_COLORS[inc.gravedad] }}>
+              {inc.tipo_novedad}
+            </div>
+            <div style={{ fontSize: "11px", color: "#334155" }}>{inc.cliente}</div>
+            <div style={{ fontSize: "10px", color: "#64748b" }}>
+              {inc.coordinador} · {inc.fecha} {inc.hora}
+            </div>
+            {inc.descripcion && (
+              <div style={{ fontSize: "10px", color: "#94a3b8", fontStyle: "italic", marginTop: 2 }}>
+                "{inc.descripcion}"
+              </div>
+            )}
+          </Tooltip>
+        </Marker>
+      ))}
     </MapContainer>
   );
 }
