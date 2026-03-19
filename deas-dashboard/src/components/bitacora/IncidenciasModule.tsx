@@ -32,7 +32,7 @@ export interface Incidencia {
 }
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
-const COORDINADORES = ["Carlos Pérez", "María López", "Juan Torres", "Ana Gómez", "Luis Vargas"];
+const COORDINADORES = ["Luis Ceballos", "William Bocanegra", "Luis Martínez", "Deivy Vargas", "Javier Millan"];
 
 const TIPOS_NOVEDAD = [
   "Intento de ingreso no autorizado",
