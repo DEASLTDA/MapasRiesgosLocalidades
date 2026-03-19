@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Shield, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 
 export default function Header() {
   const [time, setTime] = useState("");
@@ -41,9 +41,12 @@ export default function Header() {
            *
            * ───────────────────────────────────────────────────────────────
            */}
-          <div className="h-10 w-10 rounded-lg bg-white/15 border border-white/30 flex items-center justify-center">
-            <Shield size={22} className="text-white" />
-          </div>
+          {/* LOGO DEAS - archivo en /public/logo-deas.png */}
+          <img
+            src="/logo-deas.png"
+            alt="DEAS Seguridad"
+            className="h-12 w-auto object-contain"
+          />
 
           <div>
             <p className="font-heading text-white text-xl font-bold tracking-widest uppercase leading-none">
