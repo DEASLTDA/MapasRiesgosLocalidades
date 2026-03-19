@@ -125,16 +125,11 @@ export async function fetchCrimeData(localidad: string): Promise<LocalidadData> 
 
   try {
     // Consulta a la API SODA — último año disponible, localidad específica
-    const url =
-      `${SODA_BASE}` +
-      `?$where=localidad_hecho='${apiName}'` +
-      `&$limit=1000` +
-      `&$order=a_o DESC, mes DESC` +
-      `&$$app_token=${SODA_TOKEN}`;
+    // Usamos la ruta interna /api/crimes para evitar CORS
+    const url = `/api/crimes?localidad=${encodeURIComponent(apiName)}`;
 
     const res = await fetch(url, {
-      headers: { "X-App-Token": SODA_TOKEN },
-      next: { revalidate: 3600 }, // cache 1 hora
+      next: { revalidate: 3600 },
     });
 
     if (!res.ok) throw new Error(`API error: ${res.status}`);
