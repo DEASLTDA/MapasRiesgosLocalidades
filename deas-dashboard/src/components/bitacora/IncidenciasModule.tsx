@@ -93,9 +93,10 @@ const emptyForm = (): Omit<Incidencia, "id"> => ({
 interface Props {
   onShowInMap?: (incidents: Incidencia[]) => void;
   onHideRisks?: (hide: boolean) => void;
+  pinsActive?: boolean;
 }
 
-export default function IncidenciasModule({ onShowInMap, onHideRisks }: Props) {
+export default function IncidenciasModule({ onShowInMap, onHideRisks, pinsActive }: Props) {
   const [incidents, setIncidents] = useState<Incidencia[]>([]);
   const [loading, setLoading]     = useState(false);
   const [saving, setSaving]       = useState(false);
@@ -108,7 +109,7 @@ export default function IncidenciasModule({ onShowInMap, onHideRisks }: Props) {
   const [filterGrav, setFilterGrav]       = useState("");
   const [detail, setDetail]       = useState<Incidencia | null>(null);
   const [risksHidden, setRisksHidden] = useState(false);
-  const [mapActive, setMapActive] = useState(false);
+
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -158,7 +159,6 @@ export default function IncidenciasModule({ onShowInMap, onHideRisks }: Props) {
   };
 
   const handleShowInMap = () => {
-    setMapActive(true);
     onShowInMap?.(filtered);
   };
 
@@ -323,13 +323,13 @@ export default function IncidenciasModule({ onShowInMap, onHideRisks }: Props) {
               <button
                 onClick={handleShowInMap}
                 className={`flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
-                  mapActive
+                  pinsActive
                     ? "bg-green-400 text-green-900 border-green-300"
                     : "bg-white/15 hover:bg-white/25 text-white border-white/20"
                 }`}
               >
                 <Map size={11} />
-                {mapActive ? "Pines activos ✓" : "Mostrar en mapa"}
+                {pinsActive ? "Ocultar pines ✓" : "Mostrar en mapa"}
               </button>
             )}
 
