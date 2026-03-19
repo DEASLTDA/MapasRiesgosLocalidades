@@ -1,9 +1,8 @@
 "use client";
 import { useEffect } from "react";
-import { MapContainer, TileLayer, useMap, CircleMarker, Tooltip, Polygon } from "react-leaflet";
+import { MapContainer, TileLayer, useMap, CircleMarker, Tooltip } from "react-leaflet";
 import type { LocalidadData } from "@/types";
 import { getCrimeColor } from "@/components/charts/CrimeBarChart";
-import { LOCALIDADES_POLYGONS } from "@/lib/localidadesGeo";
 import L from "leaflet";
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -34,8 +33,6 @@ export default function LeafletMap({ data, selectedCrime }: Props) {
     selectedCrime ? p.type === selectedCrime : true
   ) ?? [];
 
-  const polygon = data ? LOCALIDADES_POLYGONS[data.name] : null;
-
   return (
     <MapContainer
       center={initial}
@@ -49,59 +46,6 @@ export default function LeafletMap({ data, selectedCrime }: Props) {
       />
       <MapController data={data} />
 
-      {/* ── Croquis de la localidad ── */}
-      {polygon && (
-        <>
-          {/* Relleno azul muy suave */}
-          <Polygon
-            positions={polygon}
-            pathOptions={{
-              color: "transparent",
-              weight: 0,
-              fillColor: "#112288",
-              fillOpacity: 0.07,
-            }}
-          />
-          {/* Sombra exterior del borde */}
-          <Polygon
-            positions={polygon}
-            pathOptions={{
-              color: "#112288",
-              weight: 8,
-              opacity: 0.15,
-              fill: false,
-            }}
-          />
-          {/* Borde principal grueso azul */}
-          <Polygon
-            positions={polygon}
-            pathOptions={{
-              color: "#1e40af",
-              weight: 4,
-              opacity: 1,
-              fill: false,
-              dashArray: "14 6",
-              lineCap: "round",
-              lineJoin: "round",
-            }}
-          />
-          {/* Línea blanca interior para contraste */}
-          <Polygon
-            positions={polygon}
-            pathOptions={{
-              color: "#ffffff",
-              weight: 1.5,
-              opacity: 0.7,
-              fill: false,
-              dashArray: "14 6",
-              dashOffset: "7",
-              lineCap: "round",
-            }}
-          />
-        </>
-      )}
-
-      {/* ── Puntos de incidentes ── */}
       {visiblePoints.map((p, i) => {
         const cfg = getCrimeColor(p.type);
         const isFiltered = !!selectedCrime;
