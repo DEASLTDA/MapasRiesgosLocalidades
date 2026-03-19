@@ -20,73 +20,72 @@ const GRAVEDAD_COLORS: Record<string, string> = {
   baja:    "#16a34a",
 };
 
-// ── Capa de pines usando Leaflet puro (no React-Leaflet) ─────────────────────
-// Esto evita problemas de SSR con divIcon
-function IncidentLayer({
-  incidents, zoom,
-}: {
-  incidents: Incidencia[];
-  zoom: number;
-}) {
+// ── Capa de pines usando Leaflet nativo ──────────────────────────────────────
+function IncidentLayer({ incidents, zoom }: { incidents: Incidencia[]; zoom: number }) {
   const map = useMap();
-  const layerRef = useRef<L.LayerGroup | null>(null);
+  const groupRef = useRef<L.LayerGroup | null>(null);
 
   useEffect(() => {
-    // Limpiar capa anterior
-    if (layerRef.current) {
-      layerRef.current.clearLayers();
+    if (!groupRef.current) {
+      groupRef.current = L.layerGroup().addTo(map);
     } else {
-      layerRef.current = L.layerGroup().addTo(map);
+      groupRef.current.clearLayers();
     }
 
-    const size = zoom <= 11 ? 20 : zoom <= 12 ? 26 : zoom <= 13 ? 32 : zoom <= 14 ? 38 : zoom <= 15 ? 44 : 52;
+    const size = zoom <= 11 ? 22 : zoom <= 12 ? 28 : zoom <= 13 ? 34 : zoom <= 14 ? 40 : zoom <= 15 ? 46 : 54;
+    const h = Math.round(size * 1.35);
 
     incidents.forEach((inc) => {
-      const lat = parseFloat(inc.lat);
-      const lng = parseFloat(inc.lng);
-      if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return;
+      const lat = parseFloat(String(inc.lat).replace(",", "."));
+      const lng = parseFloat(String(inc.lng).replace(",", "."));
+      if (isNaN(lat) || isNaN(lng) || Math.abs(lat) < 0.001) return;
 
       const color = GRAVEDAD_COLORS[inc.gravedad] ?? "#64748b";
 
+      const svgPin = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${h}" viewBox="0 0 40 54">
+        <defs>
+          <filter id="shadow${inc.id.slice(-4)}" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.35)"/>
+          </filter>
+        </defs>
+        <path d="M20 1C10.6 1 3 8.6 3 18C3 30 20 53 20 53C20 53 37 30 37 18C37 8.6 29.4 1 20 1Z"
+          fill="${color}" stroke="white" stroke-width="2"
+          filter="url(#shadow${inc.id.slice(-4)})"/>
+        <circle cx="20" cy="18" r="8" fill="white" opacity="0.95"/>
+        <circle cx="20" cy="18" r="4.5" fill="${color}"/>
+      </svg>`;
+
       const icon = L.divIcon({
         className: "",
-        iconSize:   [size, Math.round(size * 1.4)],
-        iconAnchor: [size / 2, Math.round(size * 1.4)],
-        html: `<svg xmlns="http://www.w3.org/2000/svg"
-          width="${size}" height="${Math.round(size * 1.4)}"
-          viewBox="0 0 40 56" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))">
-          <path d="M20 2C10.6 2 3 9.6 3 19C3 31.5 20 54 20 54C20 54 37 31.5 37 19C37 9.6 29.4 2 20 2Z"
-            fill="${color}" stroke="white" stroke-width="2.5"/>
-          <circle cx="20" cy="19" r="9" fill="white" opacity="0.95"/>
-          <circle cx="20" cy="19" r="5" fill="${color}"/>
-        </svg>`,
+        iconSize:   [size, h],
+        iconAnchor: [size / 2, h],
+        html: svgPin,
       });
 
-      const marker = L.marker([lat, lng], { icon });
+      const tooltipHtml = `
+        <div style="font-family:sans-serif;min-width:170px;max-width:220px">
+          <div style="font-weight:700;font-size:12px;color:${color};margin-bottom:3px">⚠ ${inc.tipo_novedad || "—"}</div>
+          <div style="font-weight:600;font-size:11px;color:#1e293b">${inc.cliente || "—"}</div>
+          ${inc.direccion ? `<div style="font-size:10px;color:#475569;margin-top:1px">📍 ${inc.direccion}</div>` : ""}
+          <div style="font-size:10px;color:#64748b;margin-top:2px">${inc.coordinador || ""} · ${inc.localidad || ""}</div>
+          <div style="font-size:10px;color:#94a3b8">${inc.fecha || ""} ${inc.hora || ""}</div>
+          ${inc.descripcion ? `<div style="font-size:10px;color:#64748b;margin-top:4px;padding-top:4px;border-top:1px solid #e2e8f0;font-style:italic">"${inc.descripcion}"</div>` : ""}
+        </div>`;
 
-      const tooltipContent = `
-        <div style="font-family:'DM Sans',sans-serif;min-width:160px">
-          <div style="font-weight:700;font-size:12px;color:${color};margin-bottom:4px">⚠ ${inc.tipo_novedad}</div>
-          <div style="font-weight:600;font-size:11px;color:#1e293b">${inc.cliente}</div>
-          <div style="font-size:10px;color:#475569;margin-top:2px">${inc.coordinador} · ${inc.localidad}</div>
-          <div style="font-size:10px;color:#94a3b8;margin-top:2px">${inc.fecha} ${inc.hora}</div>
-          ${inc.descripcion ? `<div style="font-size:10px;color:#94a3b8;font-style:italic;margin-top:4px;border-top:1px solid #e2e8f0;padding-top:4px">"${inc.descripcion}"</div>` : ""}
-        </div>
-      `;
-
-      marker.bindTooltip(tooltipContent, {
+      const marker = L.marker([lat, lng], { icon, zIndexOffset: 1000 });
+      marker.bindTooltip(tooltipHtml, {
         direction: "top",
-        offset: [0, -Math.round(size * 1.4) - 4],
-        opacity: 0.97,
+        offset: [0, -(h + 4)],
+        opacity: 1,
+        className: "leaflet-incident-tooltip",
       });
-
-      layerRef.current?.addLayer(marker);
+      groupRef.current?.addLayer(marker);
     });
-
-    return () => {
-      layerRef.current?.clearLayers();
-    };
   }, [incidents, zoom, map]);
+
+  useEffect(() => {
+    return () => { groupRef.current?.clearLayers(); };
+  }, []);
 
   return null;
 }
@@ -95,9 +94,9 @@ function ZoomWatcher({ onZoom }: { onZoom: (z: number) => void }) {
   const map = useMap();
   useEffect(() => {
     onZoom(map.getZoom());
-    const handler = () => onZoom(map.getZoom());
-    map.on("zoomend", handler);
-    return () => { map.off("zoomend", handler); };
+    const h = () => onZoom(map.getZoom());
+    map.on("zoomend", h);
+    return () => { map.off("zoomend", h); };
   }, [map, onZoom]);
   return null;
 }
@@ -115,28 +114,25 @@ interface Props {
   data: LocalidadData | null;
   selectedCrime: string | null;
   mapIncidents: Incidencia[];
+  hideRisks: boolean;
 }
 
-export default function LeafletMap({ data, selectedCrime, mapIncidents }: Props) {
+export default function LeafletMap({ data, selectedCrime, mapIncidents, hideRisks }: Props) {
   const initial: [number, number] = [4.6510, -74.0560];
   const [zoom, setZoom] = useState(12);
 
-  const visiblePoints = data?.points.filter((p) =>
+  const visiblePoints = (!hideRisks && data?.points.filter((p) =>
     selectedCrime ? p.type === selectedCrime : true
-  ) ?? [];
+  )) || [];
 
-  const validIncidents = mapIncidents.filter(
-    (i) => i.lat && i.lng && !isNaN(parseFloat(i.lat)) && !isNaN(parseFloat(i.lng))
-      && parseFloat(i.lat) !== 0 && parseFloat(i.lng) !== 0
-  );
+  const validIncidents = mapIncidents.filter((i) => {
+    const lat = parseFloat(String(i.lat).replace(",", "."));
+    const lng = parseFloat(String(i.lng).replace(",", "."));
+    return !isNaN(lat) && !isNaN(lng) && Math.abs(lat) > 0.001 && Math.abs(lng) > 0.001;
+  });
 
   return (
-    <MapContainer
-      center={initial}
-      zoom={12}
-      style={{ height: "100%", width: "100%" }}
-      scrollWheelZoom={true}
-    >
+    <MapContainer center={initial} zoom={12} style={{ height: "100%", width: "100%" }} scrollWheelZoom={true}>
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
         url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
@@ -168,7 +164,7 @@ export default function LeafletMap({ data, selectedCrime, mapIncidents }: Props)
         );
       })}
 
-      {/* Pines de incidencias usando Leaflet puro */}
+      {/* Pines de incidencias */}
       <IncidentLayer incidents={validIncidents} zoom={zoom} />
     </MapContainer>
   );
