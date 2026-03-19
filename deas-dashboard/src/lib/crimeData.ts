@@ -167,7 +167,6 @@ export const LOCALIDADES_CONFIG: Record<string, Omit<LocalidadData, "points">> =
       { label: "Hurto de vehículos",    value: 8  },
     ],
   },
-  },
 };
 
 // ─── Generador de puntos simulados ──────────────────────────────────────────
