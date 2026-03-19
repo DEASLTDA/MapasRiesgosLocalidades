@@ -153,6 +153,20 @@ export const LOCALIDADES_CONFIG: Record<string, Omit<LocalidadData, "points">> =
       { label: "Hurto a residencias",  value: 16 },
       { label: "Lesiones personales",  value: 7 },
     ],
+    "Santa Fe": {
+    name: "Santa Fe",
+    center: [4.6230, -74.0580],
+    zoom: 14,
+    riskScore: 76,
+    riskLevel: "alto",
+    topCrimes: [
+      { label: "Hurto a personas",      value: 40 },
+      { label: "Hurto a residencias",   value: 22 },
+      { label: "Lesiones personales",   value: 18 },
+      { label: "Riñas",                 value: 12 },
+      { label: "Hurto de vehículos",    value: 8  },
+    ],
+  },
   },
 };
 
