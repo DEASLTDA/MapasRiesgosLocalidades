@@ -1,8 +1,4 @@
-"use client";
-// ─── MapWrapper.tsx ──────────────────────────────────────────────────────────
-// Wrapper de carga dinámica: Next.js requiere que Leaflet se importe
-// del lado del cliente únicamente (no SSR). Esto evita errores en build.
-// ─────────────────────────────────────────────────────────────────────────────
+  "use client";
 import dynamic from "next/dynamic";
 import type { LocalidadData } from "@/types";
 
@@ -11,7 +7,7 @@ const DynamicMap = dynamic(() => import("./LeafletMap"), {
   loading: () => (
     <div className="flex items-center justify-center h-full bg-blue-50 rounded-xl">
       <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-3 border-[#112288] border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-[3px] border-[#112288] border-t-transparent rounded-full animate-spin" />
         <p className="text-sm text-slate-500 font-medium">Cargando mapa…</p>
       </div>
     </div>
@@ -21,9 +17,10 @@ const DynamicMap = dynamic(() => import("./LeafletMap"), {
 interface Props {
   data: LocalidadData | null;
   loading: boolean;
+  selectedCrime: string | null;
 }
 
-export default function MapWrapper({ data, loading }: Props) {
+export default function MapWrapper({ data, loading, selectedCrime }: Props) {
   return (
     <div className="relative h-full rounded-xl overflow-hidden shadow-card border border-blue-100">
       {loading && (
@@ -34,7 +31,7 @@ export default function MapWrapper({ data, loading }: Props) {
           </div>
         </div>
       )}
-      <DynamicMap data={data} />
+      <DynamicMap data={data} selectedCrime={selectedCrime} />
     </div>
   );
 }
