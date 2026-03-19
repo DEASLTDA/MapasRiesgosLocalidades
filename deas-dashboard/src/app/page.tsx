@@ -16,6 +16,14 @@ export default function DashboardPage() {
   const [loading, setLoading]             = useState(false);
   const [selectedCrime, setSelectedCrime] = useState<string | null>(null);
   const [mapIncidents, setMapIncidents]   = useState<Incidencia[]>([]);
+
+  const handleShowInMap = (incidents: Incidencia[]) => {
+    if (mapIncidents.length > 0) {
+      setMapIncidents([]); // toggle off
+    } else {
+      setMapIncidents(incidents);
+    }
+  };
   const [hideRisks, setHideRisks]         = useState(false);
 
   const load = useCallback(async (loc: string) => {
@@ -124,7 +132,8 @@ export default function DashboardPage() {
 
         {/* Fila 3: Incidencias */}
         <IncidenciasModule
-          onShowInMap={setMapIncidents}
+          onShowInMap={handleShowInMap}
+          pinsActive={mapIncidents.length > 0}
           onHideRisks={setHideRisks}
         />
 
