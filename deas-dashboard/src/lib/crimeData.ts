@@ -1,18 +1,9 @@
 // ─── lib/crimeData.ts ────────────────────────────────────────────────────────
 // Simulación de la API SODA - Datos Abiertos Bogotá (Secretaría de Seguridad)
-//
-// PARA PRODUCCIÓN: Reemplaza esta función con una llamada real:
-//   const res = await fetch(
-//     "https://www.datos.gov.co/resource/qe2b-7i5g.json" +
-//     "?$where=localidad='CHAPINERO'&$limit=500",
-//     { headers: { "X-App-Token": process.env.NEXT_PUBLIC_SODA_TOKEN! } }
-//   );
-//   return await res.json();
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { LocalidadData, CrimePoint } from "@/types";
 
-// Parámetros de cada localidad: centro geográfico, nivel de riesgo y distribución de delitos
 export const LOCALIDADES_CONFIG: Record<string, Omit<LocalidadData, "points">> = {
   "Chapinero": {
     name: "Chapinero",
@@ -153,7 +144,8 @@ export const LOCALIDADES_CONFIG: Record<string, Omit<LocalidadData, "points">> =
       { label: "Hurto a residencias",  value: 16 },
       { label: "Lesiones personales",  value: 7 },
     ],
-    "Santa Fe": {
+  },
+  "Santa Fe": {
     name: "Santa Fe",
     center: [4.6230, -74.0580],
     zoom: 14,
@@ -164,7 +156,7 @@ export const LOCALIDADES_CONFIG: Record<string, Omit<LocalidadData, "points">> =
       { label: "Hurto a residencias",   value: 22 },
       { label: "Lesiones personales",   value: 18 },
       { label: "Riñas",                 value: 12 },
-      { label: "Hurto de vehículos",    value: 8  },
+      { label: "Hurto de vehículos",    value: 8 },
     ],
   },
 };
@@ -201,7 +193,6 @@ function generatePoints(
 
 // ─── Función principal (simula fetch a API SODA) ─────────────────────────────
 export async function fetchCrimeData(localidad: string): Promise<LocalidadData> {
-  // Simula latencia de red
   await new Promise((r) => setTimeout(r, 320));
 
   const config = LOCALIDADES_CONFIG[localidad];
