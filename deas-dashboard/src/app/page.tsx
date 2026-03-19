@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const [loading, setLoading]             = useState(false);
   const [selectedCrime, setSelectedCrime] = useState<string | null>(null);
   const [mapIncidents, setMapIncidents]   = useState<Incidencia[]>([]);
+  const [hideRisks, setHideRisks]         = useState(false);
 
   const load = useCallback(async (loc: string) => {
     setLoading(true);
@@ -33,61 +34,64 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[#f1f5fb]">
       <Header />
-
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 py-4 flex flex-col gap-4">
 
-        {/* ── Fila 1: Filtro + KPIs ── */}
+        {/* Fila 1: Filtro + KPIs */}
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-3 items-start">
           <LocalidadSelector value={localidad} onChange={setLocalidad} loading={loading} />
           <StatCards data={data} />
         </div>
 
-        {/* ── Fila 2: Mapa + Panel analítico ── */}
+        {/* Fila 2: Mapa + Panel analítico */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4 flex-1 min-h-0">
-
           <div className="h-[480px] lg:h-full min-h-[420px]">
             <div className="h-full flex flex-col relative">
 
-              {/* Leyenda dinámica */}
-              <div className="absolute top-3 left-3 z-10 bg-white/92 backdrop-blur-sm rounded-lg shadow-card border border-blue-100 px-3 py-2 max-w-[220px]">
+              {/* Leyenda */}
+              <div className="absolute top-3 left-3 z-10 bg-white/92 backdrop-blur-sm rounded-lg shadow-card border border-blue-100 px-3 py-2 max-w-[240px]">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">
-                  {selectedCrime ? "Filtro activo" : mapIncidents.length > 0 ? "Incidencias en mapa" : "Concentración de Delitos"}
+                  {mapIncidents.length > 0 && hideRisks
+                    ? "Solo incidencias"
+                    : mapIncidents.length > 0
+                    ? "Delitos + Incidencias"
+                    : selectedCrime
+                    ? "Filtro activo"
+                    : "Concentración de Delitos"}
                 </p>
-                {selectedCrime ? (
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-full flex-shrink-0 bg-[#112288]" />
-                    <span className="text-[10px] text-[#112288] font-bold truncate">{selectedCrime}</span>
-                  </div>
-                ) : mapIncidents.length > 0 ? (
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-full flex-shrink-0 bg-red-500" />
-                    <span className="text-[10px] text-slate-600 font-medium">{mapIncidents.length} incidencia(s)</span>
-                    <button onClick={() => setMapIncidents([])} className="text-[9px] text-slate-400 hover:text-red-500 ml-1">✕</button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    {[
-                      { color: "#e11d48", label: "Personas" },
-                      { color: "#7c3aed", label: "Resid." },
-                      { color: "#0284c7", label: "Vehíc." },
-                    ].map((l) => (
-                      <div key={l.label} className="flex items-center gap-1">
-                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: l.color }} />
-                        <span className="text-[9px] text-slate-600 font-medium">{l.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {mapIncidents.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full flex-shrink-0 bg-[#dc2626] border-2 border-white shadow-sm" />
+                      <span className="text-[9px] text-slate-600 font-medium">{mapIncidents.length} incidencia(s)</span>
+                      <button onClick={() => setMapIncidents([])} className="text-[9px] text-slate-400 hover:text-red-500 ml-0.5">✕</button>
+                    </div>
+                  )}
+                  {!hideRisks && !selectedCrime && (
+                    <>
+                      {[
+                        { color: "#e11d48", label: "Personas" },
+                        { color: "#7c3aed", label: "Resid." },
+                        { color: "#0284c7", label: "Vehíc." },
+                      ].map((l) => (
+                        <div key={l.label} className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: l.color }} />
+                          <span className="text-[9px] text-slate-600">{l.label}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {hideRisks && (
+                    <span className="text-[9px] text-amber-600 font-semibold">Riesgos ocultos</span>
+                  )}
+                </div>
               </div>
 
-              {/* Fuente de datos */}
+              {/* Fuente */}
               <div className="absolute bottom-3 left-3 z-10 bg-white/90 backdrop-blur-sm rounded-lg px-2.5 py-1.5 border border-slate-200 shadow-sm">
                 <p className="text-[9px] text-slate-400 leading-tight">
                   <span className="font-semibold text-slate-600">Fuente:</span> Datos simulados · Secretaría de Seguridad Bogotá
                 </p>
-                <p className="text-[8px] text-slate-400">
-                  Referencia: datos.gov.co · Actualización: tiempo real
-                </p>
+                <p className="text-[8px] text-slate-400">Referencia: datos.gov.co</p>
               </div>
 
               <MapWrapper
@@ -95,11 +99,11 @@ export default function DashboardPage() {
                 loading={loading}
                 selectedCrime={selectedCrime}
                 mapIncidents={mapIncidents}
+                hideRisks={hideRisks}
               />
             </div>
           </div>
 
-          {/* Panel analítico derecho */}
           <div className="flex flex-col gap-4">
             {data ? (
               <>
@@ -118,12 +122,15 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── Fila 3: Módulo de Incidencias ── */}
-        <IncidenciasModule onShowInMap={setMapIncidents} />
+        {/* Fila 3: Incidencias */}
+        <IncidenciasModule
+          onShowInMap={setMapIncidents}
+          onHideRisks={setHideRisks}
+        />
 
         <footer className="text-center py-3">
           <p className="text-[10px] text-slate-400 tracking-wide">
-            DEAS Servicios de Seguridad · Panel Operativo · Datos simulados con fines de análisis interno
+            DEAS Servicios de Seguridad · Panel Operativo · Bogotá D.C.
           </p>
         </footer>
       </main>
