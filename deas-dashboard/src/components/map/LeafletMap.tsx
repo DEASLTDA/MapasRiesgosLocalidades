@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, useMap, CircleMarker, Tooltip } from "react-leaflet";
+import { MapContainer, TileLayer, useMap, CircleMarker, Tooltip, Marker } from "react-leaflet";
 import type { LocalidadData } from "@/types";
 import type { Incidencia } from "@/components/bitacora/IncidenciasModule";
 import { getCrimeColor } from "@/components/charts/CrimeBarChart";
@@ -20,25 +20,59 @@ const GRAVEDAD_COLORS: Record<string, string> = {
   baja:    "#16a34a",
 };
 
-// ── Componente que escucha el zoom y actualiza el estado ─────────────────────
+const GRAVEDAD_EMOJI: Record<string, string> = {
+  crítica: "🔴",
+  alta:    "🟠",
+  media:   "🟡",
+  baja:    "🟢",
+};
+
+// ── Crea el divIcon PIN después de que Leaflet está disponible en el cliente ──
+function makePinIcon(color: string, size: number) {
+  const s = size;
+  return L.divIcon({
+    className: "",
+    iconSize:   [s, s * 1.4],
+    iconAnchor: [s / 2, s * 1.4],
+    popupAnchor:[0, -(s * 1.4)],
+    html: `
+      <svg xmlns="http://www.w3.org/2000/svg"
+        width="${s}" height="${s * 1.4}" viewBox="0 0 40 56">
+        <!-- Sombra -->
+        <ellipse cx="20" cy="54" rx="8" ry="3"
+          fill="rgba(0,0,0,0.25)"/>
+        <!-- Cuerpo del pin -->
+        <path d="M20 2 C10 2 3 9 3 18 C3 30 20 54 20 54 C20 54 37 30 37 18 C37 9 30 2 20 2Z"
+          fill="${color}" stroke="white" stroke-width="2.5"/>
+        <!-- Círculo interior blanco -->
+        <circle cx="20" cy="18" r="8" fill="white" opacity="0.9"/>
+        <!-- Punto central del color -->
+        <circle cx="20" cy="18" r="4" fill="${color}"/>
+      </svg>
+    `,
+  });
+}
+
+// ── Zoom → tamaño del pin ────────────────────────────────────────────────────
+function pinSize(zoom: number): number {
+  if (zoom <= 11) return 18;
+  if (zoom <= 12) return 22;
+  if (zoom <= 13) return 26;
+  if (zoom <= 14) return 32;
+  if (zoom <= 15) return 38;
+  return 44;
+}
+
+// ── Escucha cambios de zoom ──────────────────────────────────────────────────
 function ZoomWatcher({ onZoom }: { onZoom: (z: number) => void }) {
   const map = useMap();
   useEffect(() => {
     onZoom(map.getZoom());
-    map.on("zoomend", () => onZoom(map.getZoom()));
-    return () => { map.off("zoomend"); };
+    const handler = () => onZoom(map.getZoom());
+    map.on("zoomend", handler);
+    return () => { map.off("zoomend", handler); };
   }, [map, onZoom]);
   return null;
-}
-
-// ── Zoom → radio del círculo de incidencia ───────────────────────────────────
-function incidentRadius(zoom: number): number {
-  if (zoom <= 11) return 10;
-  if (zoom <= 12) return 13;
-  if (zoom <= 13) return 16;
-  if (zoom <= 14) return 20;
-  if (zoom <= 15) return 26;
-  return 32;
 }
 
 function MapController({ data }: { data: LocalidadData | null }) {
@@ -64,14 +98,16 @@ export default function LeafletMap({ data, selectedCrime, mapIncidents }: Props)
     selectedCrime ? p.type === selectedCrime : true
   ) ?? [];
 
-  // Solo incidencias con coordenadas válidas
   const incidentMarkers = mapIncidents.filter(
-    (i) => i.lat && i.lng &&
-      !isNaN(parseFloat(i.lat)) && !isNaN(parseFloat(i.lng)) &&
-      parseFloat(i.lat) !== 0 && parseFloat(i.lng) !== 0
+    (i) =>
+      i.lat && i.lng &&
+      !isNaN(parseFloat(i.lat)) &&
+      !isNaN(parseFloat(i.lng)) &&
+      parseFloat(i.lat) !== 0 &&
+      parseFloat(i.lng) !== 0
   );
 
-  const iRadius = incidentRadius(zoom);
+  const size = pinSize(zoom);
 
   return (
     <MapContainer
@@ -97,10 +133,12 @@ export default function LeafletMap({ data, selectedCrime, mapIncidents }: Props)
             center={[p.lat, p.lng]}
             radius={isFiltered ? p.intensity * 16 : p.intensity * 13}
             pathOptions={{
-              color: isFiltered ? cfg.dot : "transparent",
-              weight: isFiltered ? 1.5 : 0,
-              fillColor: cfg.dot,
-              fillOpacity: isFiltered ? 0.75 + p.intensity * 0.2 : 0.45 + p.intensity * 0.3,
+              color:       isFiltered ? cfg.dot : "transparent",
+              weight:      isFiltered ? 1.5 : 0,
+              fillColor:   cfg.dot,
+              fillOpacity: isFiltered
+                ? 0.75 + p.intensity * 0.2
+                : 0.45 + p.intensity * 0.3,
             }}
           >
             <Tooltip direction="top" offset={[0, -4]} opacity={0.95}>
@@ -111,24 +149,20 @@ export default function LeafletMap({ data, selectedCrime, mapIncidents }: Props)
         );
       })}
 
-      {/* ── Íconos de incidencias — zoom adaptativo ── */}
+      {/* ── Pines de incidencias registradas ── */}
       {incidentMarkers.map((inc) => {
         const color = GRAVEDAD_COLORS[inc.gravedad] ?? "#64748b";
+        const emoji = GRAVEDAD_EMOJI[inc.gravedad] ?? "📍";
+        const icon  = makePinIcon(color, size);
         return (
-          <CircleMarker
-            key={`inc-${inc.id}`}
-            center={[parseFloat(inc.lat), parseFloat(inc.lng)]}
-            radius={iRadius}
-            pathOptions={{
-              color: "#ffffff",
-              weight: Math.max(2, iRadius * 0.12),
-              fillColor: color,
-              fillOpacity: 0.92,
-            }}
+          <Marker
+            key={`pin-${inc.id}-${size}`}
+            position={[parseFloat(inc.lat), parseFloat(inc.lng)]}
+            icon={icon}
           >
-            <Tooltip direction="top" offset={[0, -(iRadius + 4)]} opacity={0.97}>
+            <Tooltip direction="top" offset={[0, -(size * 1.4 + 4)]} opacity={0.97}>
               <div style={{ fontSize: "12px", fontWeight: 700, color }}>
-                ⚠ {inc.tipo_novedad}
+                {emoji} {inc.tipo_novedad}
               </div>
               <div style={{ fontSize: "11px", color: "#1e293b", marginTop: 2 }}>
                 <strong>{inc.cliente}</strong>
@@ -140,12 +174,15 @@ export default function LeafletMap({ data, selectedCrime, mapIncidents }: Props)
                 {inc.fecha} {inc.hora}
               </div>
               {inc.descripcion && (
-                <div style={{ fontSize: "10px", color: "#94a3b8", fontStyle: "italic", marginTop: 2 }}>
-                  "{inc.descripcion}"
+                <div style={{
+                  fontSize: "10px", color: "#94a3b8",
+                  fontStyle: "italic", marginTop: 2
+                }}>
+                  &ldquo;{inc.descripcion}&rdquo;
                 </div>
               )}
             </Tooltip>
-          </CircleMarker>
+          </Marker>
         );
       })}
     </MapContainer>
