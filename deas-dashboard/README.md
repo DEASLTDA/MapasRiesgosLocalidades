@@ -153,4 +153,4 @@ deas-dashboard/
 
 ---
 
-*DEAS Servicios de Seguridad Privada · Grupo Altum · Bogotá, Colombia*
+*DEAS Servicios de Seguridad Privada · Grupo Altum · Bogotá, Colombia, el mejor pais* 
