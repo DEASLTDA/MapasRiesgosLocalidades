@@ -1,10 +1,15 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { ClipboardList, Plus, X, MapPin, Filter, AlertCircle, AlertTriangle, Info, CheckCircle2, RefreshCw, Map, Eye } from "lucide-react";
+import {
+  ClipboardList, Plus, X, MapPin, Filter,
+  AlertCircle, AlertTriangle, Info, CheckCircle2,
+  RefreshCw, Map, Eye, EyeOff
+} from "lucide-react";
 
+// ─── NUEVA URL del Apps Script ────────────────────────────────────────────────
 const APPS_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbyavWkjr_zU9cmQXhxm6Ap7WEi4QIl3RUibIKIzQupIIvlfFwYAqxiJCHVVQ7Grs5zH/exec";
+  "https://script.google.com/macros/s/AKfycbxyRKlwRtYG9YHLu30K4IVOxv6PSUHfot5vio8vkT-qa3PZ614Z1rcsouHa_ZAECvIg/exec";
 
 export interface Incidencia {
   id: string;
@@ -16,6 +21,7 @@ export interface Incidencia {
   tipo_novedad: string;
   gravedad: "crítica" | "alta" | "media" | "baja";
   descripcion: string;
+  direccion: string;
   lat: string;
   lng: string;
 }
@@ -43,52 +49,53 @@ const GRAVEDAD_CONFIG = {
 
 const LOCALIDAD_COLORS = ["#e11d48","#7c3aed","#0284c7","#d97706","#059669","#db2777","#ea580c","#0891b2","#65a30d","#9333ea","#f59e0b"];
 
-// ── Limpiar fecha/hora que viene rara de Sheets ──────────────────────────────
 function cleanDate(val: string): string {
   if (!val) return "—";
-  // Si viene como fecha ISO o fecha normal
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    const [y, m, d] = val.split("-");
+    return `${d}/${m}/${y}`;
+  }
   try {
     const d = new Date(val);
-    if (!isNaN(d.getTime()) && d.getFullYear() > 1990) {
+    if (!isNaN(d.getTime()) && d.getFullYear() > 1990)
       return d.toLocaleDateString("es-CO", { day: "2-digit", month: "2-digit", year: "numeric" });
-    }
-  } catch { /* ignore */ }
+  } catch { /**/ }
   return val;
 }
 
 function cleanTime(val: string): string {
   if (!val) return "—";
-  // Si viene como hora HH:MM déjala igual
-  if (/^\d{2}:\d{2}$/.test(val)) return val;
-  try {
-    const d = new Date(val);
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
-    }
-  } catch { /* ignore */ }
-  // Si viene como número decimal de Excel (fracción del día)
+  if (/^\d{1,2}:\d{2}$/.test(val)) return val;
   const num = parseFloat(val);
-  if (!isNaN(num) && num < 1) {
+  if (!isNaN(num) && num > 0 && num < 1) {
     const totalMin = Math.round(num * 24 * 60);
     const h = Math.floor(totalMin / 60).toString().padStart(2, "0");
     const m = (totalMin % 60).toString().padStart(2, "0");
     return `${h}:${m}`;
   }
+  try {
+    const d = new Date(val);
+    if (!isNaN(d.getTime()))
+      return d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+  } catch { /**/ }
   return val;
 }
 
-const emptyForm = () => ({
+const emptyForm = (): Omit<Incidencia, "id"> => ({
   fecha: new Date().toISOString().split("T")[0],
   hora:  new Date().toTimeString().slice(0, 5),
   coordinador: "", cliente: "", localidad: "",
   tipo_novedad: TIPOS_NOVEDAD[0],
-  gravedad: "media" as Incidencia["gravedad"],
-  descripcion: "", lat: "", lng: "",
+  gravedad: "media",
+  descripcion: "", direccion: "", lat: "", lng: "",
 });
 
-interface Props { onShowInMap?: (incidents: Incidencia[]) => void }
+interface Props {
+  onShowInMap?: (incidents: Incidencia[]) => void;
+  onHideRisks?: (hide: boolean) => void;
+}
 
-export default function IncidenciasModule({ onShowInMap }: Props) {
+export default function IncidenciasModule({ onShowInMap, onHideRisks }: Props) {
   const [incidents, setIncidents] = useState<Incidencia[]>([]);
   const [loading, setLoading]     = useState(false);
   const [saving, setSaving]       = useState(false);
@@ -99,13 +106,14 @@ export default function IncidenciasModule({ onShowInMap }: Props) {
   const [filterCoord, setFilterCoord]     = useState("");
   const [filterCliente, setFilterCliente] = useState("");
   const [filterGrav, setFilterGrav]       = useState("");
-  // Modal de detalle
-  const [detail, setDetail] = useState<Incidencia | null>(null);
+  const [detail, setDetail]       = useState<Incidencia | null>(null);
+  const [risksHidden, setRisksHidden] = useState(false);
+  const [mapActive, setMapActive] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(APPS_SCRIPT_URL);
+      const res = await fetch(APPS_SCRIPT_URL + "?t=" + Date.now());
       const data = await res.json();
       if (Array.isArray(data)) setIncidents(data as Incidencia[]);
     } catch { setIncidents([]); }
@@ -129,13 +137,29 @@ export default function IncidenciasModule({ onShowInMap }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(entry),
       });
-      await loadData();
-      setForm(emptyForm());
-      setShowForm(false);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3500);
-    } catch { setErrors(["Error al guardar. Verifica tu conexión."]); }
-    finally { setSaving(false); }
+      setTimeout(async () => {
+        await loadData();
+        setForm(emptyForm());
+        setShowForm(false);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3500);
+        setSaving(false);
+      }, 1500);
+    } catch {
+      setErrors(["Error al guardar. Verifica tu conexión."]);
+      setSaving(false);
+    }
+  };
+
+  const handleToggleRisks = () => {
+    const next = !risksHidden;
+    setRisksHidden(next);
+    onHideRisks?.(next);
+  };
+
+  const handleShowInMap = () => {
+    setMapActive(true);
+    onShowInMap?.(filtered);
   };
 
   const filtered = incidents.filter((i) => {
@@ -146,42 +170,46 @@ export default function IncidenciasModule({ onShowInMap }: Props) {
   });
 
   const byLocalidad = LOCALIDADES.map((loc, i) => ({
-    localidad: loc, count: incidents.filter((inc) => inc.localidad === loc).length, color: LOCALIDAD_COLORS[i],
+    localidad: loc,
+    count: incidents.filter((inc) => inc.localidad === loc).length,
+    color: LOCALIDAD_COLORS[i],
   })).filter((d) => d.count > 0).sort((a, b) => b.count - a.count);
 
   const uniqueCoords = Array.from(new Set(incidents.map((i) => i.coordinador).filter(Boolean)));
+
   const field = (key: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [key]: e.target.value }));
 
   return (
     <>
-      {/* ── Modal de detalle ── */}
+      {/* ── Modal de detalle COMPLETO ── */}
       {detail && (
         <div
           className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => setDetail(null)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-card"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-card overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header modal */}
-            <div className="bg-[#112288] rounded-t-2xl px-5 py-4 flex items-start justify-between">
+            {/* Header */}
+            <div className="bg-[#112288] px-5 py-4 flex items-start justify-between">
               <div>
                 <p className="text-white font-heading font-bold text-base tracking-wide uppercase leading-tight">
-                  {detail.tipo_novedad}
+                  {detail.tipo_novedad || "Sin tipo"}
                 </p>
-                <p className="text-blue-300 text-xs mt-0.5">{detail.cliente} · {detail.localidad}</p>
+                <p className="text-blue-300 text-xs mt-0.5">
+                  {detail.cliente} · {detail.localidad}
+                </p>
               </div>
-              <button onClick={() => setDetail(null)} className="text-white/70 hover:text-white mt-0.5">
+              <button onClick={() => setDetail(null)} className="text-white/70 hover:text-white mt-0.5 ml-4 flex-shrink-0">
                 <X size={18} />
               </button>
             </div>
 
-            {/* Cuerpo modal */}
-            <div className="p-5 space-y-3">
-              {/* Gravedad badge */}
+            {/* Gravedad */}
+            <div className="px-5 pt-4">
               {(() => {
                 const cfg = GRAVEDAD_CONFIG[detail.gravedad] ?? GRAVEDAD_CONFIG.media;
                 return (
@@ -190,41 +218,61 @@ export default function IncidenciasModule({ onShowInMap }: Props) {
                   </span>
                 );
               })()}
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: "Fecha",        value: cleanDate(detail.fecha) },
-                  { label: "Hora",         value: cleanTime(detail.hora) },
-                  { label: "Coordinador",  value: detail.coordinador },
-                  { label: "Localidad",    value: detail.localidad },
-                ].map((r) => (
-                  <div key={r.label} className="bg-slate-50 rounded-lg px-3 py-2">
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{r.label}</p>
-                    <p className="text-sm font-semibold text-slate-700 mt-0.5">{r.value}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Coordenadas */}
-              {(detail.lat || detail.lng) && (
-                <div className="bg-blue-50 rounded-lg px-3 py-2 flex items-center gap-2">
-                  <MapPin size={13} className="text-[#112288] flex-shrink-0" />
-                  <span className="text-xs text-[#112288] font-mono">
-                    {detail.lat}, {detail.lng}
-                  </span>
+            {/* Campos principales */}
+            <div className="px-5 pt-3 pb-2 grid grid-cols-2 gap-2">
+              {[
+                { label: "Fecha",              value: cleanDate(detail.fecha) },
+                { label: "Hora",               value: cleanTime(detail.hora) },
+                { label: "Coordinador",        value: detail.coordinador || "—" },
+                { label: "Localidad",          value: detail.localidad   || "—" },
+                { label: "Cliente / Edificio", value: detail.cliente     || "—" },
+                { label: "Tipo de Novedad",    value: detail.tipo_novedad|| "—" },
+              ].map((r) => (
+                <div key={r.label} className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{r.label}</p>
+                  <p className="text-xs font-semibold text-slate-700 mt-0.5 leading-snug">{r.value}</p>
                 </div>
-              )}
+              ))}
+            </div>
 
-              {/* Descripción */}
+            {/* Dirección */}
+            {detail.direccion && (
+              <div className="px-5 pb-2">
+                <div className="bg-blue-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <MapPin size={13} className="text-[#112288] flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Dirección</p>
+                    <p className="text-xs text-[#112288] font-medium">{detail.direccion}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Descripción */}
+            <div className="px-5 pb-2">
               <div className="bg-slate-50 rounded-lg px-3 py-2">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Descripción</p>
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  {detail.descripcion || <span className="italic text-slate-400">Sin descripción registrada.</span>}
+                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+                  {detail.descripcion
+                    ? detail.descripcion
+                    : <span className="italic text-slate-400">Sin descripción registrada.</span>}
                 </p>
               </div>
             </div>
 
-            <div className="px-5 pb-5">
+            {/* Coordenadas si son válidas */}
+            {detail.lat && detail.lng && detail.lat.includes(".") && (
+              <div className="px-5 pb-2">
+                <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-center gap-2">
+                  <MapPin size={12} className="text-slate-400" />
+                  <span className="text-[10px] text-slate-400 font-mono">{detail.lat}, {detail.lng}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="px-5 pb-5 pt-2">
               <button
                 onClick={() => setDetail(null)}
                 className="w-full bg-[#112288] hover:bg-[#1a3399] text-white text-xs font-bold uppercase tracking-widest py-2.5 rounded-lg transition-colors"
@@ -238,25 +286,53 @@ export default function IncidenciasModule({ onShowInMap }: Props) {
 
       <div className="bg-white rounded-xl shadow-card border border-blue-50 overflow-hidden">
         {/* Header */}
-        <div className="bg-[#112288] px-4 py-3 flex items-center justify-between">
+        <div className="bg-[#112288] px-4 py-3 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <ClipboardList size={16} className="text-blue-200" />
             <div>
-              <p className="text-white font-heading font-bold text-sm tracking-wide uppercase">Registro de Incidencias</p>
-              <p className="text-blue-300 text-[10px]">{incidents.length} eventos · Google Sheets sincronizado</p>
+              <p className="text-white font-heading font-bold text-sm tracking-wide uppercase">
+                Registro de Incidencias
+              </p>
+              <p className="text-blue-300 text-[10px]">
+                {incidents.length} eventos · Google Sheets sincronizado
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button onClick={loadData} disabled={loading}
               className="flex items-center gap-1 bg-white/15 hover:bg-white/25 text-white text-[10px] font-semibold px-2.5 py-1.5 rounded-lg border border-white/20 transition-colors">
-              <RefreshCw size={11} className={loading ? "animate-spin" : ""} /> Actualizar
+              <RefreshCw size={11} className={loading ? "animate-spin" : ""} />
+              Actualizar
             </button>
+
+            {/* Botón ocultar/mostrar riesgos */}
+            <button
+              onClick={handleToggleRisks}
+              className={`flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                risksHidden
+                  ? "bg-yellow-400 text-yellow-900 border-yellow-300"
+                  : "bg-white/15 hover:bg-white/25 text-white border-white/20"
+              }`}
+            >
+              {risksHidden ? <Eye size={11} /> : <EyeOff size={11} />}
+              {risksHidden ? "Mostrar riesgos" : "Ocultar riesgos"}
+            </button>
+
+            {/* Botón mostrar en mapa */}
             {onShowInMap && (
-              <button onClick={() => onShowInMap(filtered)}
-                className="flex items-center gap-1 bg-white/15 hover:bg-white/25 text-white text-[10px] font-semibold px-2.5 py-1.5 rounded-lg border border-white/20 transition-colors">
-                <Map size={11} /> Mostrar en mapa
+              <button
+                onClick={handleShowInMap}
+                className={`flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                  mapActive
+                    ? "bg-green-400 text-green-900 border-green-300"
+                    : "bg-white/15 hover:bg-white/25 text-white border-white/20"
+                }`}
+              >
+                <Map size={11} />
+                {mapActive ? "Pines activos ✓" : "Mostrar en mapa"}
               </button>
             )}
+
             <button onClick={() => setShowForm((o) => !o)}
               className="flex items-center gap-1.5 bg-white text-[#112288] text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors">
               {showForm ? <><X size={13} /> Cancelar</> : <><Plus size={13} /> Nueva Incidencia</>}
@@ -279,16 +355,16 @@ export default function IncidenciasModule({ onShowInMap }: Props) {
               </div>
             )}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
-              {[
-                { label:"Fecha", type:"date", key:"fecha" as const },
-                { label:"Hora",  type:"time", key:"hora"  as const },
-              ].map((f) => (
-                <div key={f.key}>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">{f.label}</label>
-                  <input type={f.type} value={form[f.key] as string} onChange={field(f.key)}
-                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#112288]/30" />
-                </div>
-              ))}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Fecha</label>
+                <input type="date" value={form.fecha} onChange={field("fecha")}
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#112288]/30" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Hora</label>
+                <input type="time" value={form.hora} onChange={field("hora")}
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#112288]/30" />
+              </div>
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Gravedad</label>
                 <select value={form.gravedad} onChange={field("gravedad")}
@@ -323,32 +399,51 @@ export default function IncidenciasModule({ onShowInMap }: Props) {
                 </select>
               </div>
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Cliente / Edificio *</label>
+                <input type="text" placeholder="Ej. Torre Norte, Conjunto El Prado…" value={form.cliente} onChange={field("cliente")}
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#112288]/30" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Dirección</label>
+                <input type="text" placeholder="Ej. Cra 7 #90-12, Chapinero" value={form.direccion} onChange={field("direccion")}
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#112288]/30" />
+              </div>
+            </div>
+
             <div className="mb-3">
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Cliente / Edificio *</label>
-              <input type="text" placeholder="Ej. Torre Norte, Conjunto El Prado…" value={form.cliente} onChange={field("cliente")}
-                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#112288]/30" />
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Latitud (para mapa)</label>
-                <input type="text" placeholder="Ej. 4.6351" value={form.lat} onChange={field("lat")}
-                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#112288]/30" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Longitud (para mapa)</label>
-                <input type="text" placeholder="Ej. -74.0652" value={form.lng} onChange={field("lng")}
-                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#112288]/30" />
-              </div>
-            </div>
-            <div className="mb-4">
               <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Descripción</label>
               <textarea value={form.descripcion} onChange={field("descripcion")} rows={2}
                 placeholder="Descripción detallada del evento…"
                 className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#112288]/30 resize-none" />
             </div>
+
+            {/* Coordenadas opcionales */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+                  Latitud <span className="text-slate-300 normal-case font-normal">(para pin en mapa)</span>
+                </label>
+                <input type="text" placeholder="Ej. 4.6351" value={form.lat} onChange={field("lat")}
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#112288]/30" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+                  Longitud <span className="text-slate-300 normal-case font-normal">(para pin en mapa)</span>
+                </label>
+                <input type="text" placeholder="Ej. -74.0652" value={form.lng} onChange={field("lng")}
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#112288]/30" />
+              </div>
+            </div>
+            <p className="text-[9px] text-slate-400 -mt-2 mb-3">
+              💡 Para obtener coordenadas: abre Google Maps, busca la dirección, clic derecho → copia las coordenadas
+            </p>
+
             <button onClick={handleSubmit} disabled={saving}
               className="w-full bg-[#112288] hover:bg-[#1a3399] disabled:opacity-60 text-white text-xs font-bold uppercase tracking-widest py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2">
-              {saving ? <><RefreshCw size={12} className="animate-spin" /> Guardando…</> : "Guardar Incidencia"}
+              {saving ? <><RefreshCw size={12} className="animate-spin" /> Guardando en Sheets…</> : "Guardar Incidencia"}
             </button>
           </div>
         )}
@@ -438,10 +533,8 @@ export default function IncidenciasModule({ onShowInMap }: Props) {
                                 </span>
                               </td>
                               <td className="px-3 py-2">
-                                <button
-                                  onClick={() => setDetail(inc)}
-                                  className="flex items-center gap-1 text-[#112288] hover:bg-blue-50 px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors border border-blue-100"
-                                >
+                                <button onClick={() => setDetail(inc)}
+                                  className="flex items-center gap-1 text-[#112288] hover:bg-blue-50 px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors border border-blue-100">
                                   <Eye size={11} /> Ver
                                 </button>
                               </td>
