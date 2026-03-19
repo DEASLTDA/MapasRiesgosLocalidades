@@ -16,14 +16,6 @@ export default function DashboardPage() {
   const [loading, setLoading]             = useState(false);
   const [selectedCrime, setSelectedCrime] = useState<string | null>(null);
   const [mapIncidents, setMapIncidents]   = useState<Incidencia[]>([]);
-
-  const handleShowInMap = (incidents: Incidencia[]) => {
-    if (mapIncidents.length > 0) {
-      setMapIncidents([]); // toggle off
-    } else {
-      setMapIncidents(incidents);
-    }
-  };
   const [hideRisks, setHideRisks]         = useState(false);
 
   const load = useCallback(async (loc: string) => {
@@ -38,6 +30,14 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => { load(localidad); }, [localidad, load]);
+
+  const handleShowInMap = (incidents: Incidencia[]) => {
+    if (mapIncidents.length > 0) {
+      setMapIncidents([]);
+    } else {
+      setMapIncidents(incidents);
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f1f5fb]">
@@ -56,50 +56,38 @@ export default function DashboardPage() {
             <div className="h-full flex flex-col relative">
 
               {/* Leyenda */}
-              <div className="absolute top-3 left-3 z-10 bg-white/92 backdrop-blur-sm rounded-lg shadow-card border border-blue-100 px-3 py-2 max-w-[240px]">
+              <div className="absolute top-3 left-3 z-10 bg-white/95 backdrop-blur-sm rounded-lg shadow-card border border-blue-100 px-3 py-2">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">
-                  {mapIncidents.length > 0 && hideRisks
-                    ? "Solo incidencias"
-                    : mapIncidents.length > 0
-                    ? "Delitos + Incidencias"
-                    : selectedCrime
-                    ? "Filtro activo"
-                    : "Concentración de Delitos"}
+                  Nivel de Delitos · Datos SIEDCO
                 </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  {mapIncidents.length > 0 && (
-                    <div className="flex items-center gap-1">
-                      <span className="w-3 h-3 rounded-full flex-shrink-0 bg-[#dc2626] border-2 border-white shadow-sm" />
-                      <span className="text-[9px] text-slate-600 font-medium">{mapIncidents.length} incidencia(s)</span>
-                      <button onClick={() => setMapIncidents([])} className="text-[9px] text-slate-400 hover:text-red-500 ml-0.5">✕</button>
+                <div className="flex items-center gap-2">
+                  {[
+                    { color: "#dc2626", label: "Alto" },
+                    { color: "#ea580c", label: "Medio-alto" },
+                    { color: "#d97706", label: "Medio" },
+                    { color: "#16a34a", label: "Bajo" },
+                  ].map((l) => (
+                    <div key={l.label} className="flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: l.color }} />
+                      <span className="text-[9px] text-slate-600 font-medium">{l.label}</span>
                     </div>
-                  )}
-                  {!hideRisks && !selectedCrime && (
-                    <>
-                      {[
-                        { color: "#e11d48", label: "Personas" },
-                        { color: "#7c3aed", label: "Resid." },
-                        { color: "#0284c7", label: "Vehíc." },
-                      ].map((l) => (
-                        <div key={l.label} className="flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: l.color }} />
-                          <span className="text-[9px] text-slate-600">{l.label}</span>
-                        </div>
-                      ))}
-                    </>
-                  )}
-                  {hideRisks && (
-                    <span className="text-[9px] text-amber-600 font-semibold">Riesgos ocultos</span>
-                  )}
+                  ))}
                 </div>
+                {mapIncidents.length > 0 && (
+                  <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-100">
+                    <span className="w-3 h-3 rounded-full flex-shrink-0 bg-[#dc2626]" />
+                    <span className="text-[9px] text-slate-600 font-medium">{mapIncidents.length} incidencia(s)</span>
+                    <button onClick={() => setMapIncidents([])} className="text-[9px] text-slate-400 hover:text-red-500 ml-1">✕</button>
+                  </div>
+                )}
               </div>
 
               {/* Fuente */}
               <div className="absolute bottom-3 left-3 z-10 bg-white/90 backdrop-blur-sm rounded-lg px-2.5 py-1.5 border border-slate-200 shadow-sm">
                 <p className="text-[9px] text-slate-400 leading-tight">
-                  <span className="font-semibold text-slate-600">Fuente:</span> Datos simulados · Secretaría de Seguridad Bogotá
+                  <span className="font-semibold text-slate-600">Fuente:</span> SIEDCO · Secretaría Distrital de Seguridad, Convivencia y Justicia
                 </p>
-                <p className="text-[8px] text-slate-400">Referencia: datos.gov.co</p>
+                <p className="text-[8px] text-slate-400">Datos oficiales · Actualización automática</p>
               </div>
 
               <MapWrapper
@@ -112,6 +100,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Panel analítico */}
           <div className="flex flex-col gap-4">
             {data ? (
               <>
@@ -133,13 +122,13 @@ export default function DashboardPage() {
         {/* Fila 3: Incidencias */}
         <IncidenciasModule
           onShowInMap={handleShowInMap}
-          pinsActive={mapIncidents.length > 0}
           onHideRisks={setHideRisks}
+          pinsActive={mapIncidents.length > 0}
         />
 
         <footer className="text-center py-3">
           <p className="text-[10px] text-slate-400 tracking-wide">
-            DEAS Servicios de Seguridad · Panel Operativo · Bogotá D.C.
+            DEAS Servicios de Seguridad · Panel Operativo · Bogotá D.C. · Datos: SIEDCO
           </p>
         </footer>
       </main>
