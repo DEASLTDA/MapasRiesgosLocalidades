@@ -166,7 +166,7 @@ export default function IncidenciasModule({ onShowInMap }: Props) {
   })).filter((d) => d.count > 0).sort((a, b) => b.count - a.count);
 
   // ── Clientes únicos para filtro ───────────────────────────────────────────
-  const uniqueCoords = [...new Set(incidents.map((i) => i.coordinador).filter(Boolean))];
+  const uniqueCoords = Array.from(new Set(incidents.map((i) => i.coordinador).filter(Boolean)));
 
   const field = (key: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
