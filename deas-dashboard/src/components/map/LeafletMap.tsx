@@ -1,6 +1,6 @@
 "use client";
-import { useEffect } from "react";
-import { MapContainer, TileLayer, useMap, CircleMarker, Tooltip, Marker } from "react-leaflet";
+import { useEffect, useState } from "react";
+import { MapContainer, TileLayer, useMap, CircleMarker, Tooltip } from "react-leaflet";
 import type { LocalidadData } from "@/types";
 import type { Incidencia } from "@/components/bitacora/IncidenciasModule";
 import { getCrimeColor } from "@/components/charts/CrimeBarChart";
@@ -20,24 +20,25 @@ const GRAVEDAD_COLORS: Record<string, string> = {
   baja:    "#16a34a",
 };
 
-function createIncidentIcon(gravedad: string) {
-  const color = GRAVEDAD_COLORS[gravedad] ?? "#64748b";
-  return L.divIcon({
-    html: `
-      <div style="
-        width:28px;height:28px;
-        background:${color};
-        border:3px solid white;
-        border-radius:50% 50% 50% 0;
-        transform:rotate(-45deg);
-        box-shadow:0 2px 8px rgba(0,0,0,0.35);
-      "></div>
-    `,
-    className: "",
-    iconSize: [28, 28],
-    iconAnchor: [14, 28],
-    popupAnchor: [0, -28],
-  });
+// ── Componente que escucha el zoom y actualiza el estado ─────────────────────
+function ZoomWatcher({ onZoom }: { onZoom: (z: number) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    onZoom(map.getZoom());
+    map.on("zoomend", () => onZoom(map.getZoom()));
+    return () => { map.off("zoomend"); };
+  }, [map, onZoom]);
+  return null;
+}
+
+// ── Zoom → radio del círculo de incidencia ───────────────────────────────────
+function incidentRadius(zoom: number): number {
+  if (zoom <= 11) return 10;
+  if (zoom <= 12) return 13;
+  if (zoom <= 13) return 16;
+  if (zoom <= 14) return 20;
+  if (zoom <= 15) return 26;
+  return 32;
 }
 
 function MapController({ data }: { data: LocalidadData | null }) {
@@ -57,15 +58,20 @@ interface Props {
 
 export default function LeafletMap({ data, selectedCrime, mapIncidents }: Props) {
   const initial: [number, number] = [4.6510, -74.0560];
+  const [zoom, setZoom] = useState(12);
 
   const visiblePoints = data?.points.filter((p) =>
     selectedCrime ? p.type === selectedCrime : true
   ) ?? [];
 
-  // Incidencias con coordenadas válidas
+  // Solo incidencias con coordenadas válidas
   const incidentMarkers = mapIncidents.filter(
-    (i) => i.lat && i.lng && !isNaN(parseFloat(i.lat)) && !isNaN(parseFloat(i.lng))
+    (i) => i.lat && i.lng &&
+      !isNaN(parseFloat(i.lat)) && !isNaN(parseFloat(i.lng)) &&
+      parseFloat(i.lat) !== 0 && parseFloat(i.lng) !== 0
   );
+
+  const iRadius = incidentRadius(zoom);
 
   return (
     <MapContainer
@@ -79,6 +85,7 @@ export default function LeafletMap({ data, selectedCrime, mapIncidents }: Props)
         url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
       />
       <MapController data={data} />
+      <ZoomWatcher onZoom={setZoom} />
 
       {/* ── Puntos de delitos ── */}
       {visiblePoints.map((p, i) => {
@@ -104,29 +111,43 @@ export default function LeafletMap({ data, selectedCrime, mapIncidents }: Props)
         );
       })}
 
-      {/* ── Íconos de incidencias registradas ── */}
-      {incidentMarkers.map((inc) => (
-        <Marker
-          key={inc.id}
-          position={[parseFloat(inc.lat), parseFloat(inc.lng)]}
-          icon={createIncidentIcon(inc.gravedad)}
-        >
-          <Tooltip direction="top" offset={[0, -28]} opacity={0.97} permanent={false}>
-            <div style={{ fontSize: "12px", fontWeight: 700, color: GRAVEDAD_COLORS[inc.gravedad] }}>
-              {inc.tipo_novedad}
-            </div>
-            <div style={{ fontSize: "11px", color: "#334155" }}>{inc.cliente}</div>
-            <div style={{ fontSize: "10px", color: "#64748b" }}>
-              {inc.coordinador} · {inc.fecha} {inc.hora}
-            </div>
-            {inc.descripcion && (
-              <div style={{ fontSize: "10px", color: "#94a3b8", fontStyle: "italic", marginTop: 2 }}>
-                "{inc.descripcion}"
+      {/* ── Íconos de incidencias — zoom adaptativo ── */}
+      {incidentMarkers.map((inc) => {
+        const color = GRAVEDAD_COLORS[inc.gravedad] ?? "#64748b";
+        return (
+          <CircleMarker
+            key={`inc-${inc.id}`}
+            center={[parseFloat(inc.lat), parseFloat(inc.lng)]}
+            radius={iRadius}
+            pathOptions={{
+              color: "#ffffff",
+              weight: Math.max(2, iRadius * 0.12),
+              fillColor: color,
+              fillOpacity: 0.92,
+            }}
+          >
+            <Tooltip direction="top" offset={[0, -(iRadius + 4)]} opacity={0.97}>
+              <div style={{ fontSize: "12px", fontWeight: 700, color }}>
+                ⚠ {inc.tipo_novedad}
               </div>
-            )}
-          </Tooltip>
-        </Marker>
-      ))}
+              <div style={{ fontSize: "11px", color: "#1e293b", marginTop: 2 }}>
+                <strong>{inc.cliente}</strong>
+              </div>
+              <div style={{ fontSize: "10px", color: "#475569" }}>
+                {inc.coordinador} · {inc.localidad}
+              </div>
+              <div style={{ fontSize: "10px", color: "#64748b" }}>
+                {inc.fecha} {inc.hora}
+              </div>
+              {inc.descripcion && (
+                <div style={{ fontSize: "10px", color: "#94a3b8", fontStyle: "italic", marginTop: 2 }}>
+                  "{inc.descripcion}"
+                </div>
+              )}
+            </Tooltip>
+          </CircleMarker>
+        );
+      })}
     </MapContainer>
   );
 }
