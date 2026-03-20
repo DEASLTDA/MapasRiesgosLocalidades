@@ -154,8 +154,8 @@ export default function SiedcoAdmin({ onClose, onDataUpdated }: Props) {
   const isComplete = saved.length === LOCALIDADES_DEAS.length;
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 pt-16 pb-8">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-card">
+    <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-card">
 
         {/* Header */}
         <div className="bg-[#112288] px-5 py-4">
