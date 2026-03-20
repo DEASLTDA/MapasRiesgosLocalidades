@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Building2, Search, X, RefreshCw, ChevronDown, Plus, Save } from "lucide-react";
 
 const CLIENTES_URL = "https://script.google.com/macros/s/AKfycbwKhEVuer0zLTRHoEyO1soLQWfp6Gn5cYiMzKqz0RDg3bLBEblqiyqRJBJ9JExAs9kV/exec";
@@ -13,6 +13,10 @@ export const COORD_COLORS: Record<string, { color: string }> = {
 };
 
 const COORDINADORES_LIST = Object.keys(COORD_COLORS);
+
+const LOCALIDADES_DEAS = [
+  "Usaquén", "Chapinero", "Santa Fe", "Suba", "Barrios Unidos", "Teusaquillo",
+];
 
 export interface Cliente {
   nombre: string;
@@ -38,42 +42,61 @@ export default function ClientesPanel({
   onShowClientes, onFiltroChange, onClienteSelect,
   clientesVisible, filtroActual, clienteSeleccionado,
 }: Props) {
-  const [clientes, setClientes]     = useState<Cliente[]>([]);
-  const [loading, setLoading]       = useState(false);
-  const [busqueda, setBusqueda]     = useState("");
-  const [expanded, setExpanded]     = useState(false);
-  const [showForm, setShowForm]     = useState(false);
-  const [form, setForm]             = useState(EMPTY_FORM);
-  const [saving, setSaving]         = useState(false);
-  const [saved, setSaved]           = useState(false);
+  const [clientes, setClientes]   = useState<Cliente[]>([]);
+  const [loading, setLoading]     = useState(false);
+  const [busqueda, setBusqueda]   = useState("");
+  const [filtroLoc, setFiltroLoc] = useState("");
+  const [expanded, setExpanded]   = useState(false);
+  const [showForm, setShowForm]   = useState(false);
+  const [form, setForm]           = useState(EMPTY_FORM);
+  const [saving, setSaving]       = useState(false);
+  const [saved, setSaved]         = useState(false);
+  const loadedRef                 = useRef(false);
 
-  const cargarClientes = useCallback(async () => {
+  // Cargar UNA SOLA VEZ al montar
+  useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
     setLoading(true);
-    try {
-      const res  = await fetch(CLIENTES_URL + "?t=" + Date.now());
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        setClientes(data);
-        if (clientesVisible) onShowClientes(data);
-      }
-    } catch { /* silent */ }
-    finally { setLoading(false); }
-  }, [clientesVisible, onShowClientes]);
+    fetch(CLIENTES_URL + "?t=" + Date.now())
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setClientes(data); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
-  useEffect(() => { cargarClientes(); }, [cargarClientes]);
+  const recargar = () => {
+    setLoading(true);
+    fetch(CLIENTES_URL + "?t=" + Date.now())
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setClientes(data);
+          // Si pines visibles, actualizar
+          if (clientesVisible) onShowClientes(data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
 
   const clientesFiltrados = clientes.filter(c => {
     const matchCoord = !filtroActual ||
       String(c.coordinador).toUpperCase().trim() === filtroActual.toUpperCase();
+    const matchLoc   = !filtroLoc ||
+      String(c.localidad || "").toLowerCase().includes(filtroLoc.toLowerCase());
     const matchBusq  = !busqueda ||
       c.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
       (c.direccion || "").toLowerCase().includes(busqueda.toLowerCase());
-    return matchCoord && matchBusq;
+    return matchCoord && matchLoc && matchBusq;
   });
 
-  const handleToggle = () => {
-    if (clientesVisible) onShowClientes([]);
-    else onShowClientes(clientes);
+  const handleTogglePines = () => {
+    if (clientesVisible) {
+      onShowClientes([]); // ocultar
+    } else {
+      onShowClientes(clientes); // mostrar todos
+    }
   };
 
   const handleSave = async () => {
@@ -87,11 +110,7 @@ export default function ClientesPanel({
       });
       setSaved(true);
       setForm(EMPTY_FORM);
-      setTimeout(() => {
-        setSaved(false);
-        setShowForm(false);
-        cargarClientes();
-      }, 1500);
+      setTimeout(() => { setSaved(false); setShowForm(false); recargar(); }, 1500);
     } catch { /* silent */ }
     finally { setSaving(false); }
   };
@@ -108,8 +127,8 @@ export default function ClientesPanel({
               <p className="text-blue-300 text-[10px]">{clientes.length} clientes · {COORDINADORES_LIST.length} coordinadores</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={cargarClientes} disabled={loading}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <button onClick={recargar} disabled={loading}
               className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
               <RefreshCw size={13} className={`text-blue-200 ${loading ? "animate-spin" : ""}`} />
             </button>
@@ -119,9 +138,11 @@ export default function ClientesPanel({
               }`}>
               <Plus size={13} /> Nuevo cliente
             </button>
-            <button onClick={handleToggle}
+            <button onClick={handleTogglePines}
               className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${
-                clientesVisible ? "bg-green-400 text-green-900" : "bg-white/15 text-white hover:bg-white/25"
+                clientesVisible
+                  ? "bg-green-400 text-green-900 hover:bg-green-300"
+                  : "bg-white/15 text-white hover:bg-white/25"
               }`}>
               {clientesVisible ? "Ocultar pines" : "Ver en mapa"}
             </button>
@@ -162,12 +183,10 @@ export default function ClientesPanel({
       {/* Formulario nuevo cliente */}
       {showForm && (
         <div className="bg-white px-5 py-4 border-t border-blue-200">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">
-            Registrar nuevo cliente
-          </p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">Registrar nuevo cliente</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Nombre del cliente *</label>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Nombre *</label>
               <input value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
                 placeholder="E.D. EJEMPLO P.H."
                 className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#112288]/30" />
@@ -188,9 +207,11 @@ export default function ClientesPanel({
             </div>
             <div>
               <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Localidad</label>
-              <input value={form.localidad} onChange={e => setForm(f => ({ ...f, localidad: e.target.value }))}
-                placeholder="Chapinero"
-                className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#112288]/30" />
+              <select value={form.localidad} onChange={e => setForm(f => ({ ...f, localidad: e.target.value }))}
+                className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#112288]/30 bg-white">
+                <option value="">Seleccionar...</option>
+                {LOCALIDADES_DEAS.map(l => <option key={l} value={l}>{l}</option>)}
+              </select>
             </div>
           </div>
           <div className="flex gap-2">
@@ -198,21 +219,25 @@ export default function ClientesPanel({
               className="px-4 py-2 border border-slate-200 rounded-xl text-sm text-slate-500 hover:bg-slate-50">
               Cancelar
             </button>
-            <button onClick={handleSave} disabled={saving || !form.nombre || !form.direccion || !form.coordinador}
+            <button onClick={handleSave}
+              disabled={saving || !form.nombre || !form.direccion || !form.coordinador}
               className="flex-1 flex items-center justify-center gap-2 bg-[#112288] text-white font-bold text-sm py-2 rounded-xl hover:bg-[#1a3399] disabled:opacity-50 transition-colors">
-              {saved ? "✓ Guardado" : saving ? <><RefreshCw size={14} className="animate-spin" /> Guardando…</> : <><Save size={14} /> Guardar cliente</>}
+              {saved ? "✓ Guardado" : saving
+                ? <><RefreshCw size={14} className="animate-spin" /> Guardando…</>
+                : <><Save size={14} /> Guardar cliente</>}
             </button>
           </div>
           <p className="text-[10px] text-slate-400 mt-2">
-            💡 Las coordenadas se geocodificarán automáticamente desde Apps Script
+            💡 Las coordenadas se asignarán manualmente en el Sheet o ejecutando geocodificarClientes
           </p>
         </div>
       )}
 
-      {/* Lista */}
+      {/* Lista expandible */}
       {expanded && (
         <div className="bg-white">
-          <div className="px-4 py-3 border-b border-slate-100">
+          <div className="px-4 py-3 border-b border-slate-100 space-y-2">
+            {/* Búsqueda */}
             <div className="relative">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input type="text" placeholder="Buscar cliente o dirección..." value={busqueda}
@@ -224,29 +249,45 @@ export default function ClientesPanel({
                 </button>
               )}
             </div>
-            <p className="text-[10px] text-slate-400 mt-1.5">{clientesFiltrados.length} resultado(s)</p>
+            {/* Filtro localidad */}
+            <select value={filtroLoc} onChange={e => setFiltroLoc(e.target.value)}
+              className="w-full py-2 px-3 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#112288]/30 bg-white text-slate-600">
+              <option value="">Todas las localidades</option>
+              {LOCALIDADES_DEAS.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+            <p className="text-[10px] text-slate-400">{clientesFiltrados.length} resultado(s)</p>
           </div>
-          <div className="max-h-56 overflow-y-auto divide-y divide-slate-50">
+
+          <div className="max-h-60 overflow-y-auto divide-y divide-slate-50">
             {clientesFiltrados.slice(0, 100).map((cliente, i) => {
               const coord = String(cliente.coordinador || "").toUpperCase().trim();
               const cc    = COORD_COLORS[coord] ?? { color: "#64748b" };
               const isSel = cliente.nombre === clienteSeleccionado;
               return (
-                <button key={i} onClick={() => {
+                <button key={i}
+                  onClick={() => {
                     onClienteSelect(isSel ? "" : cliente.nombre);
                     if (!clientesVisible) onShowClientes(clientes);
                   }}
                   className={`w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors ${isSel ? "bg-blue-50" : ""}`}>
                   <div className="flex items-start gap-2.5">
                     <span className="w-2 h-2 rounded-full flex-shrink-0 mt-1" style={{ backgroundColor: cc.color }} />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold text-slate-800 truncate">{cliente.nombre}</p>
                       <p className="text-[10px] text-slate-400 truncate">{cliente.direccion}</p>
+                      {cliente.localidad && (
+                        <p className="text-[9px] text-slate-300">{cliente.localidad}</p>
+                      )}
                     </div>
                   </div>
                 </button>
               );
             })}
+            {clientesFiltrados.length > 100 && (
+              <p className="text-center text-[10px] text-slate-400 py-2">
+                Refina la búsqueda para ver más
+              </p>
+            )}
           </div>
         </div>
       )}
