@@ -10,7 +10,7 @@ import IncidenciasModule, { Incidencia } from "@/components/bitacora/Incidencias
 import SiedcoAdmin from "@/components/ui/SiedcoAdmin";
 import ClientesPanel from "@/components/ui/ClientesPanel";
 import { fetchCrimeData } from "@/lib/crimeData";
-import type { Cliente } from "@/components/map/ClientesLayer";
+import type { Cliente } from "@/components/ui/ClientesPanel";
 import type { LocalidadData } from "@/types";
 
 // ── Constantes fuera del componente ──────────────────────────────────────────
