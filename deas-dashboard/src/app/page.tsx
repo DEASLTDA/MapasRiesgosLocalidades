@@ -37,10 +37,18 @@ export default function DashboardPage() {
   const [hideRisks, setHideRisks]         = useState(false);
   const [showAdmin, setShowAdmin]         = useState(false);
   const [siedcoData, setSiedcoData]       = useState<SiedcoRow[]>([]);
+  const [siedcoTotals, setSiedcoTotals]   = useState<Record<string, number>>({});
 
   // Cuando llegan datos de Sheets, actualiza la vista de la localidad seleccionada
   const handleSiedcoUpdate = useCallback((rows: SiedcoRow[]) => {
     setSiedcoData(rows);
+    // Calcular totales por localidad para el mapa de calor
+    const totals: Record<string, number> = {};
+    rows.forEach((r) => {
+      totals[r.localidad] = (r.hurto_personas || 0) + (r.hurto_residencias || 0) +
+        (r.hurto_autos || 0) + (r.lesiones || 0) + (r.violencia || 0);
+    });
+    setSiedcoTotals(totals);
   }, []);
 
   const buildDataFromSiedco = useCallback((loc: string, rows: SiedcoRow[]): LocalidadData | null => {
@@ -175,6 +183,7 @@ export default function DashboardPage() {
                 selectedCrime={selectedCrime}
                 mapIncidents={mapIncidents}
                 hideRisks={hideRisks}
+                siedcoData={siedcoTotals}
               />
             </div>
           </div>
