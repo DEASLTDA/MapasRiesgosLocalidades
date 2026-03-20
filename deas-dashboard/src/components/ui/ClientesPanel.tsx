@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { Building2, Search, X, RefreshCw, ChevronDown, Plus, Save } from "lucide-react";
+import { Building2, Search, X, RefreshCw, ChevronDown, Plus, Save, ExternalLink } from "lucide-react";
+
+const CLIENTES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1uPeBRhN46WS5laskck8C0aGGzf9LmeBlnnIzxnkqu3U/edit";
 
 const CLIENTES_URL = "https://script.google.com/macros/s/AKfycbwKhEVuer0zLTRHoEyO1soLQWfp6Gn5cYiMzKqz0RDg3bLBEblqiyqRJBJ9JExAs9kV/exec";
 
@@ -93,11 +95,20 @@ export default function ClientesPanel({
 
   const handleTogglePines = () => {
     if (clientesVisible) {
-      onShowClientes([]); // ocultar
+      onShowClientes([]);
     } else {
-      onShowClientes(clientes); // mostrar todos
+      // Mostrar con filtros activos aplicados
+      onShowClientes(clientesFiltrados);
     }
   };
+
+  // Cuando cambian los filtros y los pines están visibles, actualizar el mapa
+  useEffect(() => {
+    if (clientesVisible) {
+      onShowClientes(clientesFiltrados);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroActual, filtroLoc, busqueda, clientesVisible]);
 
   const handleSave = async () => {
     if (!form.nombre || !form.direccion || !form.coordinador) return;
@@ -129,9 +140,13 @@ export default function ClientesPanel({
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
             <button onClick={recargar} disabled={loading}
-              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Recargar">
               <RefreshCw size={13} className={`text-blue-200 ${loading ? "animate-spin" : ""}`} />
             </button>
+            <a href={CLIENTES_SHEET_URL} target="_blank" rel="noreferrer"
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Editar en Google Sheets">
+              <ExternalLink size={13} className="text-blue-200" />
+            </a>
             <button onClick={() => { setShowForm(!showForm); setExpanded(false); }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${
                 showForm ? "bg-white text-[#112288]" : "bg-white/15 text-white hover:bg-white/25"
