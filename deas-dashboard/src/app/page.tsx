@@ -173,7 +173,7 @@ export default function DashboardPage() {
         <div className="max-w-[1600px] w-full mx-auto px-4 py-3">
           <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-3 items-center">
             <LocalidadSelector value={localidad} onChange={setLocalidad} loading={loading} />
-            <StatCards data={data} totalDelitos={totalDelitosLocalidad} />
+            <StatCards data={data} totalDelitos={totalDelitosLocalidad} localidad={localidad} />
           </div>
         </div>
       </div>
