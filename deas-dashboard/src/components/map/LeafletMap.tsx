@@ -126,14 +126,17 @@ const HeatBlobs = L.Layer.extend({
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
 
-    const r = this._radius;
+    const zoom = map.getZoom ? map.getZoom() : 12;
+    const r = zoom <= 10 ? 20 : zoom <= 11 ? 28 : zoom <= 12 ? 40 : zoom <= 13 ? 55 : zoom <= 14 ? 72 : 95;
+    const opMod = zoom <= 10 ? 0.25 : zoom <= 11 ? 0.35 : zoom <= 12 ? 0.50 : zoom <= 13 ? 0.65 : 1.0;
     (this._points as { lat: number; lng: number; rgb: string; intensity: number }[]).forEach(pt => {
       const px = map.latLngToContainerPoint([pt.lat, pt.lng]);
       if (px.x < -r || px.x > w + r || px.y < -r || px.y > h + r) return;
+      const intensity = pt.intensity * opMod;
       const grad = ctx.createRadialGradient(px.x, px.y, 0, px.x, px.y, r);
-      grad.addColorStop(0,   `rgba(${pt.rgb},${pt.intensity})`);
-      grad.addColorStop(0.45, `rgba(${pt.rgb},${pt.intensity * 0.4})`);
-      grad.addColorStop(1,   `rgba(${pt.rgb},0)`);
+      grad.addColorStop(0,    `rgba(${pt.rgb},${intensity})`);
+      grad.addColorStop(0.45, `rgba(${pt.rgb},${intensity * 0.4})`);
+      grad.addColorStop(1,    `rgba(${pt.rgb},0)`);
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(px.x, px.y, r, 0, Math.PI * 2);
@@ -270,11 +273,19 @@ function MapLayer({
 
     // Crear capa canvas con todas las manchas difuminadas
     if (allBlobPoints.length > 0) {
-      // Radio en píxeles según zoom
-      const zoom   = map.getZoom();
-      const radius = zoom <= 11 ? 35 : zoom <= 12 ? 45 : zoom <= 13 ? 60 : zoom <= 14 ? 80 : 100;
+      const zoom = map.getZoom();
+      // Radio decrece con zoom out, opacidad también
+      const radius     = zoom <= 10 ? 20 : zoom <= 11 ? 28 : zoom <= 12 ? 40 : zoom <= 13 ? 55 : zoom <= 14 ? 72 : 95;
+      const opacityMod = zoom <= 10 ? 0.25 : zoom <= 11 ? 0.35 : zoom <= 12 ? 0.50 : zoom <= 13 ? 0.65 : 1.0;
+
+      // Ajustar opacidad de todos los puntos según zoom
+      const adjustedPoints = allBlobPoints.map(p => ({
+        ...p,
+        intensity: p.intensity * opacityMod,
+      }));
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const blobLayer = new (HeatBlobs as any)({ points: allBlobPoints, radius });
+      const blobLayer = new (HeatBlobs as any)({ points: adjustedPoints, radius });
       blobLayer.addTo(map);
       layersRef.current.push(blobLayer);
     }
