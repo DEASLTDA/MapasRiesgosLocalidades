@@ -1,7 +1,24 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { Building2, Search, X, RefreshCw, Users, ChevronDown } from "lucide-react";
-import { CLIENTES_URL, COORD_COLORS, type Cliente } from "@/components/map/ClientesLayer";
+const CLIENTES_URL = "https://script.google.com/macros/s/AKfycbwKLD6lBytIor_rl86zPhYRfPib2VaE1jnK4c5I2tbBV9HVKW0GI1dS-hAtcDq9ooPu/exec";
+
+const COORD_COLORS: Record<string, { color: string }> = {
+  "JAVIER MILLAN":    { color: "#2563eb" },
+  "LUIS CEBALLOS":    { color: "#16a34a" },
+  "WILLIAM BOCANEGRA":{ color: "#dc2626" },
+  "LUIS MARTINEZ":    { color: "#9333ea" },
+  "DEIVY VARGAS":     { color: "#ea580c" },
+};
+
+export interface Cliente {
+  nombre: string;
+  direccion: string;
+  coordinador: string;
+  localidad?: string;
+  lat: number | string;
+  long: number | string;
+}
 
 const COORDINADORES = Object.keys(COORD_COLORS);
 
