@@ -91,6 +91,7 @@ const HeatBlobs = L.Layer.extend({
     Object.assign(this._canvas.style, {
       position: "absolute", top: "0", left: "0",
       pointerEvents: "none", zIndex: "400",
+      display: "block",
     });
     map.getPanes().overlayPane.appendChild(this._canvas);
     map.on("moveend zoomend resize", this._redraw, this);
@@ -110,17 +111,18 @@ const HeatBlobs = L.Layer.extend({
 
     // Usar el tamaño del contenedor del mapa
     const mapContainer = map.getContainer();
-    const w = mapContainer.offsetWidth;
-    const h = mapContainer.offsetHeight;
+    const pad = 2; // padding para evitar artefactos en bordes
+    const w = mapContainer.offsetWidth  + pad * 2;
+    const h = mapContainer.offsetHeight + pad * 2;
     canvas.width  = w;
     canvas.height = h;
 
-    // Posicionar el canvas en la esquina superior izquierda del mapa
-    const bounds = mapContainer.getBoundingClientRect();
-    const pane   = map.getPanes().overlayPane;
+    // Posicionar el canvas incluyendo el padding negativo
+    const bounds     = mapContainer.getBoundingClientRect();
+    const pane       = map.getPanes().overlayPane;
     const paneBounds = pane.getBoundingClientRect();
-    canvas.style.left = (bounds.left - paneBounds.left) + "px";
-    canvas.style.top  = (bounds.top  - paneBounds.top)  + "px";
+    canvas.style.left = (bounds.left - paneBounds.left - pad) + "px";
+    canvas.style.top  = (bounds.top  - paneBounds.top  - pad) + "px";
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
