@@ -57,9 +57,14 @@ export default function DashboardPage() {
   useEffect(() => {
     fetch(SIEDCO_SHEETS_URL + "?t=" + Date.now())
       .then(r => r.json())
-      .then(data => { if (Array.isArray(data) && data.length > 0) handleSiedcoUpdate(data); })
+      .then(rows => {
+        if (Array.isArray(rows) && rows.length > 0) {
+          handleSiedcoUpdate(rows);
+        }
+      })
       .catch(() => {});
-  }, [handleSiedcoUpdate, SIEDCO_SHEETS_URL]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Centros geográficos correctos por localidad
   const GEO_CENTERS: Record<string, { center: [number,number]; zoom: number }> = {
@@ -117,14 +122,14 @@ export default function DashboardPage() {
     setLoading(true);
     setSelectedCrime(null);
     try {
-      // Primero intentar con datos de Sheets (más recientes)
+      // Intentar Sheets primero, fallback a datos locales
       const fromSheets = buildDataFromSiedco(loc, siedcoData);
       if (fromSheets) {
         setData(fromSheets);
       } else {
-        // Fallback a datos locales
         const d = await fetchCrimeData(loc);
         setData(d);
+        // Si Sheets llega después, lo actualizará el useEffect de siedcoData
       }
     } finally {
       setLoading(false);
@@ -133,11 +138,14 @@ export default function DashboardPage() {
 
   useEffect(() => { load(localidad); }, [localidad, load]);
 
-  // Cuando llegan datos de Sheets y hay localidad seleccionada, actualizar
+  // Cuando llegan datos de Sheets, actualizar la localidad activa inmediatamente
   useEffect(() => {
-    if (localidad && siedcoData.length > 0) {
+    if (siedcoData.length === 0) return;
+    if (localidad) {
       const fromSheets = buildDataFromSiedco(localidad, siedcoData);
-      if (fromSheets) setData(fromSheets);
+      if (fromSheets) {
+        setData(fromSheets);
+      }
     }
   }, [siedcoData, localidad, buildDataFromSiedco]);
 
@@ -157,13 +165,17 @@ export default function DashboardPage() {
         />
       )}
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 py-4 flex flex-col gap-4">
-
-        {/* Fila 1: Filtro + KPIs */}
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-3 items-start">
-          <LocalidadSelector value={localidad} onChange={setLocalidad} loading={loading} />
-          <StatCards data={data} />
+      {/* Barra sticky: Selector + KPIs — siempre visible al hacer scroll */}
+      <div className="sticky top-[68px] z-40 bg-[#f1f5fb] border-b border-blue-100 shadow-sm">
+        <div className="max-w-[1600px] w-full mx-auto px-4 py-3">
+          <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-3 items-center">
+            <LocalidadSelector value={localidad} onChange={setLocalidad} loading={loading} />
+            <StatCards data={data} />
+          </div>
         </div>
+      </div>
+
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 py-4 flex flex-col gap-4">
 
         {/* Fila 2: Mapa + Panel */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4 flex-1 min-h-0">
