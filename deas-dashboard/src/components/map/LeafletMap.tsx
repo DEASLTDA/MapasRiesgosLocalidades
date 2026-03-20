@@ -21,7 +21,7 @@ const CRIME_COLORS = {
   residencias: { hex: "#7c3aed", rgb: "124,58,237" },
   autos:       { hex: "#0284c7", rgb: "2,132,199" },
   lesiones:    { hex: "#d97706", rgb: "217,119,6" },
-  violencia:   { hex: "#ea580c", rgb: "234,88,12" },
+  violencia:   { hex: "#991b1b", rgb: "153,27,27" },
 };
 
 const NOMBRE_MAP: Record<string, string> = {
@@ -34,12 +34,12 @@ const NOMBRE_MAP: Record<string, string> = {
 };
 
 const CRIME_DIST: Record<string, Record<string, number>> = {
-  "Usaquén":        { personas: 0.42, residencias: 0.22, autos: 0.18, lesiones: 0.12, violencia: 0.06 },
-  "Chapinero":      { personas: 0.45, residencias: 0.25, autos: 0.15, lesiones: 0.10, violencia: 0.05 },
-  "Santa Fe":       { personas: 0.40, residencias: 0.20, autos: 0.10, lesiones: 0.18, violencia: 0.12 },
-  "Suba":           { personas: 0.38, residencias: 0.28, autos: 0.14, lesiones: 0.12, violencia: 0.08 },
-  "Barrios Unidos": { personas: 0.35, residencias: 0.26, autos: 0.22, lesiones: 0.11, violencia: 0.06 },
-  "Teusaquillo":    { personas: 0.38, residencias: 0.25, autos: 0.20, lesiones: 0.10, violencia: 0.07 },
+  "Usaquén":        { personas: 0.42, residencias: 0.22, autos: 0.18, lesiones: 0.12, homicidios: 0.03, extorsion: 0.03 },
+  "Chapinero":      { personas: 0.45, residencias: 0.25, autos: 0.15, lesiones: 0.10, homicidios: 0.02, extorsion: 0.03 },
+  "Santa Fe":       { personas: 0.40, residencias: 0.20, autos: 0.10, lesiones: 0.18, homicidios: 0.06, extorsion: 0.06 },
+  "Suba":           { personas: 0.38, residencias: 0.28, autos: 0.14, lesiones: 0.12, homicidios: 0.04, extorsion: 0.04 },
+  "Barrios Unidos": { personas: 0.35, residencias: 0.26, autos: 0.22, lesiones: 0.11, homicidios: 0.03, extorsion: 0.03 },
+  "Teusaquillo":    { personas: 0.38, residencias: 0.25, autos: 0.20, lesiones: 0.10, homicidios: 0.03, extorsion: 0.04 },
 };
 
 function pointInPolygon(point: [number, number], polygon: [number, number][]): boolean {
@@ -222,22 +222,23 @@ function MapLayer({
         dashArray: isSelected ? "8 4" : undefined,
       }).addTo(map);
 
-      // Tooltip
-      const totalStr = total > 0 ? total.toLocaleString("es-CO") : "Sin datos SIEDCO";
+      // Tooltip con datos reales del Sheets
+      const totalStr = total > 0 ? total.toLocaleString("es-CO") : "Sin datos";
       manto.bindTooltip(
         `<div style="font-family:sans-serif;min-width:190px">
           <div style="font-weight:700;font-size:13px;color:#112288;margin-bottom:5px">${nombre}</div>
           <div style="font-size:11px;color:#334155;line-height:1.9">
-            <span style="color:${CRIME_COLORS.personas.hex}">●</span> Hurto personas: <b>${Math.round(dist.personas * total).toLocaleString("es-CO")}</b><br/>
-            <span style="color:${CRIME_COLORS.residencias.hex}">●</span> Hurto residencias: <b>${Math.round(dist.residencias * total).toLocaleString("es-CO")}</b><br/>
-            <span style="color:${CRIME_COLORS.autos.hex}">●</span> Hurto automotores: <b>${Math.round(dist.autos * total).toLocaleString("es-CO")}</b><br/>
-            <span style="color:${CRIME_COLORS.lesiones.hex}">●</span> Lesiones: <b>${Math.round(dist.lesiones * total).toLocaleString("es-CO")}</b><br/>
-            <span style="color:${CRIME_COLORS.violencia.hex}">●</span> Violencia intrafamiliar: <b>${Math.round(dist.violencia * total).toLocaleString("es-CO")}</b>
+            <span style="color:#e11d48">●</span> Hurto personas: <b>${Math.round(dist.personas * total).toLocaleString("es-CO")}</b><br/>
+            <span style="color:#7c3aed">●</span> Hurto residencias: <b>${Math.round(dist.residencias * total).toLocaleString("es-CO")}</b><br/>
+            <span style="color:#0284c7">●</span> Hurto automotores: <b>${Math.round(dist.autos * total).toLocaleString("es-CO")}</b><br/>
+            <span style="color:#d97706">●</span> Lesiones: <b>${Math.round(dist.lesiones * total).toLocaleString("es-CO")}</b><br/>
+            <span style="color:#991b1b">●</span> Homicidios: <b>${Math.round((dist.homicidios||0.03) * total).toLocaleString("es-CO")}</b><br/>
+            <span style="color:#ea580c">●</span> Extorsión: <b>${Math.round((dist.extorsion||0.03) * total).toLocaleString("es-CO")}</b>
           </div>
           <div style="margin-top:5px;padding-top:4px;border-top:1px solid #e2e8f0;font-size:10px;color:#64748b">
             Total: <b>${totalStr}</b>
           </div>
-          <div style="font-size:9px;color:#94a3b8;margin-top:2px">SIEDCO · dic/2025</div>
+          <div style="font-size:9px;color:#94a3b8;margin-top:2px">SIEDCO · 2026</div>
         </div>`,
         { direction: "top", sticky: true, opacity: 0.97 }
       );
