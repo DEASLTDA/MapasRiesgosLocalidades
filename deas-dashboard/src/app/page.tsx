@@ -110,6 +110,17 @@ export default function DashboardPage() {
     setSiedcoTotals(totals);
   }, []);
 
+  // Total real de delitos para la localidad activa (para StatCards)
+  const totalDelitosLocalidad = siedcoRows.length > 0 && localidad
+    ? (() => {
+        const row = siedcoRows.find(r => String(r.localidad).trim() === localidad);
+        if (!row) return null;
+        return parseNum(row.hurto_personas) + parseNum(row.hurto_residencias) +
+          parseNum(row.hurto_autos) + parseNum(row.lesiones) +
+          parseNum(row.homicidios) + parseNum(row.extorsion);
+      })()
+    : null;
+
   // Auto-carga Sheets al iniciar
   useEffect(() => {
     fetch(SIEDCO_URL + "?t=" + Date.now())
@@ -162,7 +173,7 @@ export default function DashboardPage() {
         <div className="max-w-[1600px] w-full mx-auto px-4 py-3">
           <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-3 items-center">
             <LocalidadSelector value={localidad} onChange={setLocalidad} loading={loading} />
-            <StatCards data={data} />
+            <StatCards data={data} totalDelitos={totalDelitosLocalidad} />
           </div>
         </div>
       </div>
