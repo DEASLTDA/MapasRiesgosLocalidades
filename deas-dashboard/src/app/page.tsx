@@ -45,10 +45,15 @@ export default function DashboardPage() {
   const handleSiedcoUpdate = useCallback((rows: SiedcoRow[]) => {
     setSiedcoData(rows);
     const totals: Record<string, number> = {};
+    const parse = (v: unknown) => {
+      if (typeof v === "number") return v;
+      const s = String(v || "").replace(/\./g, "").replace(/,/g, "");
+      return parseInt(s, 10) || 0;
+    };
     rows.forEach((r) => {
-      totals[r.localidad] = (Number(r.hurto_personas) || 0) + (Number(r.hurto_residencias) || 0) +
-        (Number(r.hurto_autos) || 0) + (Number(r.lesiones) || 0) +
-        (Number(r.homicidios) || 0) + (Number(r.extorsion) || 0);
+      totals[r.localidad] = parse(r.hurto_personas) + parse(r.hurto_residencias) +
+        parse(r.hurto_autos) + parse(r.lesiones) +
+        parse(r.homicidios) + parse(r.extorsion);
     });
     setSiedcoTotals(totals);
   }, []);
@@ -65,6 +70,19 @@ export default function DashboardPage() {
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Parser robusto para números de Google Sheets
+  // Maneja: "6813", "6.813", "5.444", 6813, etc.
+  const parseSheetNumber = (val: unknown): number => {
+    if (val === null || val === undefined || val === "") return 0;
+    if (typeof val === "number") return val;
+    const str = String(val).trim();
+    // Si tiene punto como separador de miles (ej: "5.444", "10.740")
+    // y NO tiene coma decimal, eliminar los puntos
+    const cleaned = str.replace(/\./g, "").replace(/,/g, "");
+    const num = parseInt(cleaned, 10);
+    return isNaN(num) ? 0 : num;
+  };
 
   // Centros geográficos correctos por localidad
   const GEO_CENTERS: Record<string, { center: [number,number]; zoom: number }> = {
@@ -84,12 +102,12 @@ export default function DashboardPage() {
     if (!geo) return null;
 
     // Asegurar que los valores son números
-    const hp  = Number(row.hurto_personas)    || 0;
-    const hr  = Number(row.hurto_residencias) || 0;
-    const ha  = Number(row.hurto_autos)       || 0;
-    const lp  = Number(row.lesiones)          || 0;
-    const hom = Number(row.homicidios)        || 0;
-    const ext = Number(row.extorsion)         || 0;
+    const hp  = parseSheetNumber(row.hurto_personas);
+    const hr  = parseSheetNumber(row.hurto_residencias);
+    const ha  = parseSheetNumber(row.hurto_autos);
+    const lp  = parseSheetNumber(row.lesiones);
+    const hom = parseSheetNumber(row.homicidios);
+    const ext = parseSheetNumber(row.extorsion);
     const total = hp + hr + ha + lp + hom + ext;
     if (total === 0) return null;
 
