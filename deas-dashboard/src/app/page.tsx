@@ -8,18 +8,28 @@ import RiskGauge from "@/components/charts/RiskGauge";
 import CrimeBarChart from "@/components/charts/CrimeBarChart";
 import IncidenciasModule, { Incidencia } from "@/components/bitacora/IncidenciasModule";
 import SiedcoAdmin from "@/components/ui/SiedcoAdmin";
-import { fetchCrimeData, LOCALIDADES_LIST } from "@/lib/crimeData";
+import { fetchCrimeData } from "@/lib/crimeData";
 import type { LocalidadData } from "@/types";
 
-interface SiedcoRow {
-  localidad: string;
-  hurto_personas: number;
-  hurto_residencias: number;
-  hurto_autos: number;
-  lesiones: number;
-  homicidios: number;
-  extorsion: number;
-  año: number;
+// ── Constantes fuera del componente ──────────────────────────────────────────
+const SIEDCO_URL = "https://script.google.com/macros/s/AKfycbx6FUDYg80JhC1DwTtrCfUsFTVbeW3I_beqTA3hDYjMpEkZlODO-FeF8N-FXeTw3hg-/exec";
+
+const GEO_CENTERS: Record<string, { center: [number, number]; zoom: number }> = {
+  "Usaquén":        { center: [4.7050, -74.0317], zoom: 13 },
+  "Chapinero":      { center: [4.6490, -74.0630], zoom: 14 },
+  "Santa Fe":       { center: [4.6100, -74.0700], zoom: 14 },
+  "Suba":           { center: [4.7380, -74.0850], zoom: 13 },
+  "Barrios Unidos": { center: [4.6680, -74.0820], zoom: 14 },
+  "Teusaquillo":    { center: [4.6440, -74.0920], zoom: 14 },
+};
+
+// Parser robusto — maneja "5444", "5.444", 5444
+function parseNum(val: unknown): number {
+  if (val === null || val === undefined || val === "") return 0;
+  if (typeof val === "number") return Math.round(val);
+  const cleaned = String(val).trim().replace(/\./g, "").replace(/,/g, "");
+  const n = parseInt(cleaned, 10);
+  return isNaN(n) ? 0 : n;
 }
 
 function calcRiskLevel(score: number): "alto" | "medio" | "bajo" {
@@ -28,6 +38,54 @@ function calcRiskLevel(score: number): "alto" | "medio" | "bajo" {
   return "bajo";
 }
 
+interface SiedcoRow {
+  localidad: string;
+  hurto_personas: unknown;
+  hurto_residencias: unknown;
+  hurto_autos: unknown;
+  lesiones: unknown;
+  homicidios: unknown;
+  extorsion: unknown;
+  año: unknown;
+}
+
+function buildFromSiedco(loc: string, rows: SiedcoRow[]): LocalidadData | null {
+  const row = rows.find((r) => String(r.localidad).trim() === loc);
+  if (!row) return null;
+  const geo = GEO_CENTERS[loc];
+  if (!geo) return null;
+
+  const hp  = parseNum(row.hurto_personas);
+  const hr  = parseNum(row.hurto_residencias);
+  const ha  = parseNum(row.hurto_autos);
+  const lp  = parseNum(row.lesiones);
+  const hom = parseNum(row.homicidios);
+  const ext = parseNum(row.extorsion);
+  const total = hp + hr + ha + lp + hom + ext;
+  if (total === 0) return null;
+
+  const topCrimes = [
+    { label: "Hurto a personas",    value: Math.round((hp  / total) * 100) },
+    { label: "Hurto a residencias", value: Math.round((hr  / total) * 100) },
+    { label: "Lesiones personales", value: Math.round((lp  / total) * 100) },
+    { label: "Homicidios",          value: Math.round((hom / total) * 100) },
+    { label: "Extorsión",           value: Math.round((ext / total) * 100) },
+  ].sort((a, b) => b.value - a.value);
+
+  const riskScore = Math.min(100, Math.round((total / 15000) * 100));
+
+  return {
+    name:      loc,
+    center:    geo.center,
+    zoom:      geo.zoom,
+    riskScore,
+    riskLevel: calcRiskLevel(riskScore),
+    topCrimes,
+    points:    [],
+  };
+}
+
+// ── Componente principal ──────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [localidad, setLocalidad]         = useState<string>("");
   const [data, setData]                   = useState<LocalidadData | null>(null);
@@ -36,136 +94,52 @@ export default function DashboardPage() {
   const [mapIncidents, setMapIncidents]   = useState<Incidencia[]>([]);
   const [hideRisks, setHideRisks]         = useState(false);
   const [showAdmin, setShowAdmin]         = useState(false);
-  const [siedcoData, setSiedcoData]       = useState<SiedcoRow[]>([]);
+  const [siedcoRows, setSiedcoRows]       = useState<SiedcoRow[]>([]);
   const [siedcoTotals, setSiedcoTotals]   = useState<Record<string, number>>({});
 
-  // Cuando llegan datos de Sheets, actualiza la vista de la localidad seleccionada
-  const SIEDCO_SHEETS_URL = "https://script.google.com/macros/s/AKfycbx6FUDYg80JhC1DwTtrCfUsFTVbeW3I_beqTA3hDYjMpEkZlODO-FeF8N-FXeTw3hg-/exec";
-
-  const handleSiedcoUpdate = useCallback((rows: SiedcoRow[]) => {
-    setSiedcoData(rows);
+  // Actualiza totales para el mapa y recalcula data si hay localidad activa
+  const applySiedcoRows = useCallback((rows: SiedcoRow[]) => {
+    setSiedcoRows(rows);
     const totals: Record<string, number> = {};
-    const parse = (v: unknown) => {
-      if (typeof v === "number") return v;
-      const s = String(v || "").replace(/\./g, "").replace(/,/g, "");
-      return parseInt(s, 10) || 0;
-    };
     rows.forEach((r) => {
-      totals[r.localidad] = parse(r.hurto_personas) + parse(r.hurto_residencias) +
-        parse(r.hurto_autos) + parse(r.lesiones) +
-        parse(r.homicidios) + parse(r.extorsion);
+      const loc = String(r.localidad).trim();
+      totals[loc] = parseNum(r.hurto_personas) + parseNum(r.hurto_residencias) +
+        parseNum(r.hurto_autos) + parseNum(r.lesiones) +
+        parseNum(r.homicidios) + parseNum(r.extorsion);
     });
     setSiedcoTotals(totals);
   }, []);
 
-  // Auto-cargar datos de SIEDCO al iniciar
+  // Auto-carga Sheets al iniciar
   useEffect(() => {
-    fetch(SIEDCO_SHEETS_URL + "?t=" + Date.now())
+    fetch(SIEDCO_URL + "?t=" + Date.now())
       .then(r => r.json())
-      .then(rows => {
-        if (Array.isArray(rows) && rows.length > 0) {
-          handleSiedcoUpdate(rows);
-        }
-      })
+      .then(rows => { if (Array.isArray(rows) && rows.length > 0) applySiedcoRows(rows); })
       .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [applySiedcoRows]);
 
-  // Parser robusto para números de Google Sheets
-  // Maneja: "6813", "6.813", "5.444", 6813, etc.
-  const parseSheetNumber = (val: unknown): number => {
-    if (val === null || val === undefined || val === "") return 0;
-    if (typeof val === "number") return val;
-    const str = String(val).trim();
-    // Si tiene punto como separador de miles (ej: "5.444", "10.740")
-    // y NO tiene coma decimal, eliminar los puntos
-    const cleaned = str.replace(/\./g, "").replace(/,/g, "");
-    const num = parseInt(cleaned, 10);
-    return isNaN(num) ? 0 : num;
-  };
+  // Cuando Sheets llega Y hay localidad activa → actualizar KPIs
+  useEffect(() => {
+    if (siedcoRows.length === 0 || !localidad) return;
+    const d = buildFromSiedco(localidad, siedcoRows);
+    if (d) setData(d);
+  }, [siedcoRows, localidad]);
 
-  // Centros geográficos correctos por localidad
-  const GEO_CENTERS: Record<string, { center: [number,number]; zoom: number }> = {
-    "Usaquén":        { center: [4.7050, -74.0317], zoom: 13 },
-    "Chapinero":      { center: [4.6490, -74.0630], zoom: 14 },
-    "Santa Fe":       { center: [4.6100, -74.0700], zoom: 14 },
-    "Suba":           { center: [4.7380, -74.0850], zoom: 13 },
-    "Barrios Unidos": { center: [4.6680, -74.0820], zoom: 14 },
-    "Teusaquillo":    { center: [4.6440, -74.0920], zoom: 14 },
-  };
-
-  const buildDataFromSiedco = useCallback((loc: string, rows: SiedcoRow[]): LocalidadData | null => {
-    const row = rows.find((r) => String(r.localidad).trim() === loc);
-    if (!row) return null;
-
-    const geo = GEO_CENTERS[loc];
-    if (!geo) return null;
-
-    // Asegurar que los valores son números
-    const hp  = parseSheetNumber(row.hurto_personas);
-    const hr  = parseSheetNumber(row.hurto_residencias);
-    const ha  = parseSheetNumber(row.hurto_autos);
-    const lp  = parseSheetNumber(row.lesiones);
-    const hom = parseSheetNumber(row.homicidios);
-    const ext = parseSheetNumber(row.extorsion);
-    const total = hp + hr + ha + lp + hom + ext;
-    if (total === 0) return null;
-
-    const topCrimes = [
-      { label: "Hurto a personas",        value: Math.round((hp / total) * 100) },
-      { label: "Hurto a residencias",     value: Math.round((hr / total) * 100) },
-      { label: "Lesiones personales",     value: Math.round((lp / total) * 100) },
-      { label: "Homicidios", value: Math.round((hom / total) * 100) },
-      { label: "Extorsión", value: Math.round((ext / total) * 100) },
-      { label: "Hurto automotores",       value: Math.round((ha / total) * 100) },
-    ].sort((a, b) => b.value - a.value);
-
-    // Score: Usaquén tiene ~9000 delitos → 100/100 sería ~15000
-    const avgMax  = 15000;
-    const riskScore = Math.min(100, Math.round((total / avgMax) * 100));
-
-    return {
-      name:      loc,
-      center:    geo.center,
-      zoom:      geo.zoom,
-      riskScore,
-      riskLevel: calcRiskLevel(riskScore),
-      topCrimes,
-      points:    [],
-    };
-  }, []);
-
-  const load = useCallback(async (loc: string) => {
-    if (!loc) { setData(null); return; }
+  // Cambio de localidad
+  useEffect(() => {
+    if (!localidad) { setData(null); return; }
     setLoading(true);
     setSelectedCrime(null);
-    try {
-      // Intentar Sheets primero, fallback a datos locales
-      const fromSheets = buildDataFromSiedco(loc, siedcoData);
-      if (fromSheets) {
-        setData(fromSheets);
-      } else {
-        const d = await fetchCrimeData(loc);
-        setData(d);
-        // Si Sheets llega después, lo actualizará el useEffect de siedcoData
-      }
-    } finally {
+    const fromSheets = buildFromSiedco(localidad, siedcoRows);
+    if (fromSheets) {
+      setData(fromSheets);
       setLoading(false);
+    } else {
+      fetchCrimeData(localidad)
+        .then(d => setData(d))
+        .finally(() => setLoading(false));
     }
-  }, [siedcoData, buildDataFromSiedco]);
-
-  useEffect(() => { load(localidad); }, [localidad, load]);
-
-  // Cuando llegan datos de Sheets, actualizar la localidad activa inmediatamente
-  useEffect(() => {
-    if (siedcoData.length === 0) return;
-    if (localidad) {
-      const fromSheets = buildDataFromSiedco(localidad, siedcoData);
-      if (fromSheets) {
-        setData(fromSheets);
-      }
-    }
-  }, [siedcoData, localidad, buildDataFromSiedco]);
+  }, [localidad]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleShowInMap = (incidents: Incidencia[]) => {
     setMapIncidents(mapIncidents.length > 0 ? [] : incidents);
@@ -179,11 +153,11 @@ export default function DashboardPage() {
       {showAdmin && (
         <SiedcoAdmin
           onClose={() => setShowAdmin(false)}
-          onDataUpdated={handleSiedcoUpdate}
+          onDataUpdated={applySiedcoRows}
         />
       )}
 
-      {/* Barra sticky: Selector + KPIs — siempre visible al hacer scroll */}
+      {/* Barra sticky: Selector + KPIs */}
       <div className="sticky top-[68px] z-40 bg-[#f1f5fb] border-b border-blue-100 shadow-sm">
         <div className="max-w-[1600px] w-full mx-auto px-4 py-3">
           <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-3 items-center">
@@ -199,7 +173,6 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4 flex-1 min-h-0">
           <div className="h-[480px] lg:h-full min-h-[420px]">
             <div className="h-full flex flex-col relative">
-
               {/* Leyenda */}
               <div className="absolute top-3 left-3 z-10 bg-white/95 backdrop-blur-sm rounded-lg shadow-card border border-blue-100 px-3 py-2">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">
@@ -233,8 +206,8 @@ export default function DashboardPage() {
                   <span className="font-semibold text-slate-600">Fuente:</span> SIEDCO · Sec. Distrital de Seguridad
                 </p>
                 <p className="text-[8px] text-slate-400">
-                  {siedcoData.length > 0
-                    ? `✓ Datos actualizados · ${siedcoData.length} localidades`
+                  {siedcoRows.length > 0
+                    ? `✓ Datos actualizados · ${siedcoRows.length} localidades`
                     : "Datos base dic/2025"}
                 </p>
               </div>
@@ -265,15 +238,12 @@ export default function DashboardPage() {
                 <p className="text-slate-400 text-xs text-center">
                   Selecciona una localidad para ver el análisis detallado.
                 </p>
-                <p className="text-slate-300 text-[10px] text-center">
-                  O explora el mapa para ver el nivel de riesgo de cada zona.
-                </p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Fila 3: Incidencias */}
+        {/* Incidencias */}
         <IncidenciasModule
           onShowInMap={handleShowInMap}
           onHideRisks={setHideRisks}
