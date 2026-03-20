@@ -26,7 +26,7 @@ export interface Incidencia {
   lng: string;
 }
 
-const COORDINADORES = ["Javier Millan", "Luis Ceballos", "William Bocanegra", "Barbara Patiño", "Jorge Rodriguez"];
+const COORDINADORES = ["Javier Millan", "Luis Ceballos", "William Bocanegra", "Deivy Vargas", "Luis Martinez"];
 
 const TIPOS_NOVEDAD = [
   "Hurto a personas",
