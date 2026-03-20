@@ -14,6 +14,7 @@ const LOCALIDADES_DEAS = [
   "Santa Fe",
   "Suba",
   "Barrios Unidos",
+  "Teusaquillo",
 ];
 
 interface SiedcoRow {
@@ -153,7 +154,7 @@ export default function SiedcoAdmin({ onClose, onDataUpdated }: Props) {
   const isComplete = saved.length === LOCALIDADES_DEAS.length;
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 pt-16 pb-8">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-card">
 
         {/* Header */}
