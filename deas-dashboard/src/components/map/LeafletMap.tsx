@@ -76,38 +76,75 @@ function generatePointsInPolygon(ring: number[][], count: number, seed: number):
 
 // ── Canvas Heatmap Layer ──────────────────────────────────────────────────────
 // Dibuja manchas difuminadas usando Canvas superpuesto al mapa
-// ── Dibuja manchas difuminadas con círculos Leaflet (sin canvas) ─────────────
+// ── Canvas HeatBlobs — gradientes radiales que se mezclan orgánicamente ───────
+const HeatBlobs = L.Layer.extend({
+  initialize(options: { points: { lat: number; lng: number; rgb: string; intensity: number }[] }) {
+    L.setOptions(this, options);
+    this._points = options.points;
+  },
+  onAdd(map: L.Map) {
+    this._map = map;
+    this._canvas = L.DomUtil.create("canvas", "leaflet-heatblob");
+    const pane = map.getPanes().overlayPane;
+    pane.appendChild(this._canvas);
+    Object.assign(this._canvas.style, {
+      position: "absolute", pointerEvents: "none", zIndex: "400",
+    });
+    map.on("moveend zoomend move zoom resize", this._redraw, this);
+    this._redraw();
+    return this;
+  },
+  onRemove(map: L.Map) {
+    map.off("moveend zoomend move zoom resize", this._redraw, this);
+    L.DomUtil.remove(this._canvas);
+  },
+  _redraw() {
+    const map    = this._map;
+    const canvas = this._canvas as HTMLCanvasElement;
+    const size   = map.getSize();
+    canvas.width  = size.x;
+    canvas.height = size.y;
+
+    const pane     = map.getPanes().overlayPane;
+    const mapDiv   = map.getContainer();
+    const mapRect  = mapDiv.getBoundingClientRect();
+    const paneRect = pane.getBoundingClientRect();
+    canvas.style.left = (mapRect.left - paneRect.left) + "px";
+    canvas.style.top  = (mapRect.top  - paneRect.top)  + "px";
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, size.x, size.y);
+
+    const zoom    = map.getZoom();
+    const r       = zoom <= 10 ? 22 : zoom <= 11 ? 32 : zoom <= 12 ? 45 : zoom <= 13 ? 62 : zoom <= 14 ? 80 : 100;
+    const opMod   = zoom <= 10 ? 0.22 : zoom <= 11 ? 0.32 : zoom <= 12 ? 0.48 : zoom <= 13 ? 0.65 : 1.0;
+
+    (this._points as { lat: number; lng: number; rgb: string; intensity: number }[]).forEach(pt => {
+      const px = map.latLngToContainerPoint([pt.lat, pt.lng]);
+      if (px.x < -r || px.x > size.x + r || px.y < -r || px.y > size.y + r) return;
+      const intensity = pt.intensity * opMod;
+      const grad = ctx.createRadialGradient(px.x, px.y, 0, px.x, px.y, r);
+      grad.addColorStop(0,    `rgba(${pt.rgb},${intensity})`);
+      grad.addColorStop(0.45, `rgba(${pt.rgb},${intensity * 0.38})`);
+      grad.addColorStop(1,    `rgba(${pt.rgb},0)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(px.x, px.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  },
+});
+
 function drawBlobs(
   map: L.Map,
   points: { lat: number; lng: number; rgb: string; intensity: number }[],
   layersRef: React.MutableRefObject<L.Layer[]>
 ) {
-  const zoom   = map.getZoom();
-  const radius = zoom <= 10 ? 600 : zoom <= 11 ? 900 : zoom <= 12 ? 1300 : zoom <= 13 ? 1800 : zoom <= 14 ? 2400 : 3200;
-
-  points.forEach(pt => {
-    // Extraer color hex desde rgb string
-    const [r, g, b] = pt.rgb.split(",").map(Number);
-    const hex = "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("");
-
-    // 3 anillos concéntricos por punto para efecto difuminado
-    const rings = [
-      { r: radius,        o: pt.intensity * 0.08 },
-      { r: radius * 0.6,  o: pt.intensity * 0.18 },
-      { r: radius * 0.28, o: pt.intensity * 0.40 },
-    ];
-    rings.forEach(({ r: rad, o }) => {
-      const c = L.circle([pt.lat, pt.lng], {
-        radius: rad,
-        fillColor: hex,
-        fillOpacity: o,
-        color: "transparent",
-        weight: 0,
-        interactive: false,
-      }).addTo(map);
-      layersRef.current.push(c);
-    });
-  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const layer = new (HeatBlobs as any)({ points });
+  layer.addTo(map);
+  layersRef.current.push(layer);
 }
 
 interface ArcGISFeature {
