@@ -1,19 +1,35 @@
 "use client";
-import { TrendingUp, MapPin, Shield, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { TrendingUp, MapPin, Shield, ClipboardList } from "lucide-react";
 import type { LocalidadData } from "@/types";
+
+const INCIDENCIAS_URL = "https://script.google.com/macros/s/AKfycbxyRKlwRtYG9YHLu30K4IVOxv6PSUHfot5vio8vkT-qa3PZ614Z1rcsouHa_ZAECvIg/exec";
 
 interface Props {
   data: LocalidadData | null;
   totalDelitos?: number | null;
+  localidad?: string;
 }
 
-export default function StatCards({ data, totalDelitos }: Props) {
-  // Usar total real del Sheets si está disponible
-  const total = totalDelitos ?? (data ? Math.round((data.riskScore / 100) * 15000) : 0);
+export default function StatCards({ data, totalDelitos, localidad }: Props) {
+  const [incidenciasCount, setIncidenciasCount] = useState<number | null>(null);
 
-  // Zonas de alta intensidad = tipos de delito con más del 20% del total
-  const highRisk = data ? data.topCrimes.filter(c => c.value > 20).length : 0;
+  // Cargar incidencias y filtrar por localidad
+  useEffect(() => {
+    if (!localidad) { setIncidenciasCount(null); return; }
+    fetch(INCIDENCIAS_URL + "?t=" + Date.now())
+      .then(r => r.json())
+      .then(rows => {
+        if (!Array.isArray(rows)) return;
+        const count = rows.filter((r: Record<string, string>) =>
+          String(r.localidad || "").trim().toLowerCase() === localidad.toLowerCase()
+        ).length;
+        setIncidenciasCount(count);
+      })
+      .catch(() => setIncidenciasCount(0));
+  }, [localidad]);
 
+  const total     = totalDelitos ?? (data ? Math.round((data.riskScore / 100) * 15000) : 0);
   const topCrime  = data?.topCrimes[0]?.label ?? "—";
   const riskScore = data?.riskScore ?? 0;
 
@@ -26,10 +42,10 @@ export default function StatCards({ data, totalDelitos }: Props) {
       accent: "border-blue-200",
     },
     {
-      label: "Zonas de Alta Intensidad",
-      value: data ? highRisk.toString() : "—",
-      sub:   "Tipos de delito predominantes",
-      icon:  <AlertCircle size={16} className="text-red-600" />,
+      label: "Incidencias DEAS",
+      value: incidenciasCount !== null ? incidenciasCount.toString() : "—",
+      sub:   localidad ? `Registradas en ${localidad}` : "Selecciona localidad",
+      icon:  <ClipboardList size={16} className="text-red-600" />,
       accent: "border-red-200",
     },
     {
@@ -58,9 +74,9 @@ export default function StatCards({ data, totalDelitos }: Props) {
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-400">{c.label}</p>
-            {c.icon}
+            {"icon" in c && c.icon}
           </div>
-          <p className={`font-heading font-bold text-slate-800 leading-tight ${c.small ? "text-sm" : "text-2xl"}`}>
+          <p className={`font-heading font-bold text-slate-800 leading-tight ${"small" in c && c.small ? "text-sm" : "text-2xl"}`}>
             {c.value}
           </p>
           <p className="text-[10px] text-slate-400 mt-0.5">{c.sub}</p>
