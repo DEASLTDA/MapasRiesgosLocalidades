@@ -17,7 +17,8 @@ interface SiedcoRow {
   hurto_residencias: number;
   hurto_autos: number;
   lesiones: number;
-  violencia: number;
+  homicidios: number;
+  extorsion: number;
   año: number;
 }
 
@@ -39,14 +40,15 @@ export default function DashboardPage() {
   const [siedcoTotals, setSiedcoTotals]   = useState<Record<string, number>>({});
 
   // Cuando llegan datos de Sheets, actualiza la vista de la localidad seleccionada
-  const SIEDCO_SHEETS_URL = "https://script.google.com/macros/s/AKfycbzn1_4OIY__8s1kqKLWzJ29e_lwHXSq6Up2e30FMdS6EYsZGHP-AMW-OwyvD80xqrbc/exec";
+  const SIEDCO_SHEETS_URL = "https://script.google.com/macros/s/AKfycbx6FUDYg80JhC1DwTtrCfUsFTVbeW3I_beqTA3hDYjMpEkZlODO-FeF8N-FXeTw3hg-/exec";
 
   const handleSiedcoUpdate = useCallback((rows: SiedcoRow[]) => {
     setSiedcoData(rows);
     const totals: Record<string, number> = {};
     rows.forEach((r) => {
       totals[r.localidad] = (Number(r.hurto_personas) || 0) + (Number(r.hurto_residencias) || 0) +
-        (Number(r.hurto_autos) || 0) + (Number(r.lesiones) || 0) + (Number(r.violencia) || 0);
+        (Number(r.hurto_autos) || 0) + (Number(r.lesiones) || 0) +
+        (Number(r.homicidios) || 0) + (Number(r.extorsion) || 0);
     });
     setSiedcoTotals(totals);
   }, []);
@@ -81,15 +83,17 @@ export default function DashboardPage() {
     const hr  = Number(row.hurto_residencias) || 0;
     const ha  = Number(row.hurto_autos)       || 0;
     const lp  = Number(row.lesiones)          || 0;
-    const vi  = Number(row.violencia)         || 0;
-    const total = hp + hr + ha + lp + vi;
+    const hom = Number(row.homicidios)        || 0;
+    const ext = Number(row.extorsion)         || 0;
+    const total = hp + hr + ha + lp + hom + ext;
     if (total === 0) return null;
 
     const topCrimes = [
       { label: "Hurto a personas",        value: Math.round((hp / total) * 100) },
       { label: "Hurto a residencias",     value: Math.round((hr / total) * 100) },
       { label: "Lesiones personales",     value: Math.round((lp / total) * 100) },
-      { label: "Violencia intrafamiliar", value: Math.round((vi / total) * 100) },
+      { label: "Homicidios", value: Math.round((hom / total) * 100) },
+      { label: "Extorsión", value: Math.round((ext / total) * 100) },
       { label: "Hurto automotores",       value: Math.round((ha / total) * 100) },
     ].sort((a, b) => b.value - a.value);
 
