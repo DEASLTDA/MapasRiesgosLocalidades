@@ -29,6 +29,7 @@ export default function LocalidadSelector({ value, onChange, loading }: Props) {
               disabled:opacity-50 disabled:cursor-wait
             "
           >
+            <option value="">— Todas las localidades —</option>
             {LOCALIDADES_DEAS.map((loc) => (
               <option key={loc} value={loc}>{loc}</option>
             ))}
