@@ -19,23 +19,7 @@ const GRAVEDAD_COLORS: Record<string, string> = {
   baja:    "#16a34a",
 };
 
-// Localidades DEAS con centros y datos de distribución de delitos
-const DEAS_ZONAS = [
-  { name: "Usaquén",        lat: 4.7050, lng: -74.0317, radius: 4500,
-    crimes: { personas: 0.42, residencias: 0.22, autos: 0.18, lesiones: 0.12, violencia: 0.06 } },
-  { name: "Chapinero",      lat: 4.6490, lng: -74.0630, radius: 3200,
-    crimes: { personas: 0.45, residencias: 0.25, autos: 0.15, lesiones: 0.10, violencia: 0.05 } },
-  { name: "Santa Fe",       lat: 4.6100, lng: -74.0700, radius: 2800,
-    crimes: { personas: 0.40, residencias: 0.20, autos: 0.10, lesiones: 0.18, violencia: 0.12 } },
-  { name: "Suba",           lat: 4.7380, lng: -74.0850, radius: 5500,
-    crimes: { personas: 0.38, residencias: 0.28, autos: 0.14, lesiones: 0.12, violencia: 0.08 } },
-  { name: "Barrios Unidos", lat: 4.6680, lng: -74.0820, radius: 2500,
-    crimes: { personas: 0.35, residencias: 0.26, autos: 0.22, lesiones: 0.11, violencia: 0.06 } },
-  { name: "Teusaquillo",    lat: 4.6440, lng: -74.0920, radius: 2600,
-    crimes: { personas: 0.38, residencias: 0.25, autos: 0.20, lesiones: 0.10, violencia: 0.07 } },
-];
-
-// Colores por tipo de delito (igual que el gráfico de barras)
+// Colores por tipo de delito
 const CRIME_COLORS = {
   personas:    "#e11d48",
   residencias: "#7c3aed",
@@ -44,32 +28,76 @@ const CRIME_COLORS = {
   violencia:   "#ea580c",
 };
 
-// Genera puntos de heatmap dispersos alrededor de un centro
-function generateHeatPoints(
-  lat: number, lng: number,
-  radiusM: number,
-  count: number,
-  seed: number
-): [number, number, number][] {
-  let s = seed;
-  const rng = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
-  const latDeg = radiusM / 111320;
-  const lngDeg = radiusM / (111320 * Math.cos(lat * Math.PI / 180));
-  return Array.from({ length: count }, () => {
-    const angle = rng() * 2 * Math.PI;
-    // Distribución gaussiana: más puntos en el centro
-    const r = Math.sqrt(-2 * Math.log(rng() + 0.0001)) * 0.35;
-    const dist = Math.min(r, 1.0);
-    return [
-      lat + Math.sin(angle) * dist * latDeg,
-      lng + Math.cos(angle) * dist * lngDeg,
-      0.3 + rng() * 0.7,
-    ] as [number, number, number];
-  });
+// Mapeo nombre IDECA (mayúsculas) → nombre dashboard
+const NOMBRE_MAP: Record<string, string> = {
+  "USAQUÉN":        "Usaquén",
+  "USAQUEN":        "Usaquén",
+  "CHAPINERO":      "Chapinero",
+  "SANTA FE":       "Santa Fe",
+  "SANTAFE":        "Santa Fe",
+  "SUBA":           "Suba",
+  "BARRIOS UNIDOS": "Barrios Unidos",
+  "TEUSAQUILLO":    "Teusaquillo",
+};
+
+// Distribución por tipo de delito por localidad (proporciones)
+const CRIME_DIST: Record<string, Record<string, number>> = {
+  "Usaquén":        { personas: 0.42, residencias: 0.22, autos: 0.18, lesiones: 0.12, violencia: 0.06 },
+  "Chapinero":      { personas: 0.45, residencias: 0.25, autos: 0.15, lesiones: 0.10, violencia: 0.05 },
+  "Santa Fe":       { personas: 0.40, residencias: 0.20, autos: 0.10, lesiones: 0.18, violencia: 0.12 },
+  "Suba":           { personas: 0.38, residencias: 0.28, autos: 0.14, lesiones: 0.12, violencia: 0.08 },
+  "Barrios Unidos": { personas: 0.35, residencias: 0.26, autos: 0.22, lesiones: 0.11, violencia: 0.06 },
+  "Teusaquillo":    { personas: 0.38, residencias: 0.25, autos: 0.20, lesiones: 0.10, violencia: 0.07 },
+};
+
+// Genera puntos aleatorios DENTRO de un polígono usando bounding box + point-in-polygon
+function pointInPolygon(point: [number, number], polygon: [number, number][]): boolean {
+  const [x, y] = point;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
 }
 
-// ── Heatmap Layer ─────────────────────────────────────────────────────────────
-function HeatLayer({
+function generatePointsInPolygon(
+  polygon: [number, number][],
+  count: number,
+  seed: number
+): [number, number][] {
+  let s = seed;
+  const rng = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+
+  // Bounding box
+  const lngs = polygon.map(p => p[0]);
+  const lats = polygon.map(p => p[1]);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+
+  const points: [number, number][] = [];
+  let attempts = 0;
+  while (points.length < count && attempts < count * 20) {
+    attempts++;
+    const lng = minLng + rng() * (maxLng - minLng);
+    const lat = minLat + rng() * (maxLat - minLat);
+    if (pointInPolygon([lng, lat], polygon)) {
+      points.push([lat, lng]);
+    }
+  }
+  return points;
+}
+
+// ── Capa principal del mapa ───────────────────────────────────────────────────
+interface ArcGISFeature {
+  attributes: Record<string, string | number>;
+  geometry: { rings: number[][][] };
+}
+
+function MapLayer({
   selectedLocalidad,
   hideRisks,
   selectedCrime,
@@ -82,130 +110,151 @@ function HeatLayer({
 }) {
   const map = useMap();
   const layersRef = useRef<L.Layer[]>([]);
+  const [geoData, setGeoData] = useState<ArcGISFeature[]>([]);
+
+  // Cargar GeoJSON IDECA una sola vez
+  useEffect(() => {
+    fetch("/localidades_ideca.json")
+      .then(r => r.json())
+      .then(data => {
+        if (data.features) setGeoData(data.features);
+      })
+      .catch(e => console.error("Error cargando localidades:", e));
+  }, []);
 
   useEffect(() => {
-    layersRef.current.forEach((l) => map.removeLayer(l));
+    // Limpiar capas anteriores
+    layersRef.current.forEach(l => map.removeLayer(l));
     layersRef.current = [];
-    if (hideRisks) return;
+    if (hideRisks || geoData.length === 0) return;
 
-    const hasSelection   = selectedLocalidad !== "";
-    const hasCrimeFilter = selectedCrime !== null;
+    const hasSelection = selectedLocalidad !== "";
+    const maxTotal = Math.max(...Object.values(siedcoData), 5000);
 
-    // Calcular totales para normalizar
-    const maxTotal = Math.max(
-      ...DEAS_ZONAS.map((z) => siedcoData[z.name] || 5000),
-      1
-    );
+    // Calcular qué tipo de delito está filtrando
+    const crimeKey = selectedCrime
+      ? selectedCrime.toLowerCase().includes("personas")    ? "personas"
+      : selectedCrime.toLowerCase().includes("residencias") ? "residencias"
+      : selectedCrime.toLowerCase().includes("auto")        ? "autos"
+      : selectedCrime.toLowerCase().includes("lesiones")    ? "lesiones"
+      : selectedCrime.toLowerCase().includes("violencia")   ? "violencia"
+      : null
+      : null;
 
-    DEAS_ZONAS.forEach((zona) => {
-      const isSelected = zona.name === selectedLocalidad;
-      const total      = siedcoData[zona.name] || 5000;
-      const ratio      = total / maxTotal;
-      const pointCount = Math.round(60 + ratio * 140);
-      const seed       = zona.name.charCodeAt(0) * 31 + zona.name.charCodeAt(1);
+    geoData.forEach((feature) => {
+      const rawName = String(feature.attributes.LocNombre || "").toUpperCase().trim();
+      const nombre  = NOMBRE_MAP[rawName] ?? null;
+      if (!nombre) return; // Solo las 6 localidades DEAS
 
-      if (hasCrimeFilter) {
-        // Modo filtro por delito: color del delito seleccionado
-        const crimeKey = selectedCrime?.toLowerCase().includes("personas")    ? "personas"
-          : selectedCrime?.toLowerCase().includes("residencias") ? "residencias"
-          : selectedCrime?.toLowerCase().includes("auto")        ? "autos"
-          : selectedCrime?.toLowerCase().includes("lesiones")    ? "lesiones"
-          : selectedCrime?.toLowerCase().includes("violencia")   ? "violencia"
-          : "personas";
+      const isSelected  = nombre === selectedLocalidad;
+      const total       = siedcoData[nombre] || 0;
+      const ratio       = total > 0 ? total / maxTotal : 0.25;
+      const dist        = CRIME_DIST[nombre] ?? CRIME_DIST["Usaquén"];
 
-        const crimeRatio = zona.crimes[crimeKey as keyof typeof zona.crimes] || 0.2;
-        const color      = CRIME_COLORS[crimeKey as keyof typeof CRIME_COLORS];
-        const opacity    = (hasSelection && !isSelected) ? 0.08 : crimeRatio * 0.9;
+      // Convertir rings de ArcGIS a [lat, lng][]
+      const ring = feature.geometry.rings[0];
+      if (!ring || ring.length < 3) return;
+      const polygon: [number, number][] = ring.map(p => [p[1], p[0]]);
 
-        drawGradientCircle(map, zona.lat, zona.lng, zona.radius, color, opacity, layersRef);
-
-      } else {
-        // Modo normal: colores mezclados por tipo de delito
-        if (hasSelection && !isSelected) {
-          // Localidades no seleccionadas: muy tenues
-          drawGradientCircle(map, zona.lat, zona.lng, zona.radius, "#94a3b8", 0.08, layersRef);
-          return;
-        }
-
-        const baseOpacity = isSelected ? 0.85 : 0.60;
-
-        // Dibujar capas por tipo de delito (de menor a mayor)
-        // Cada tipo tiene su color y su área proporcional
-        const crimeEntries = Object.entries(zona.crimes)
-          .sort(([, a], [, b]) => a - b); // menor primero → mayor encima
-
-        crimeEntries.forEach(([crimeKey, crimeRatio]) => {
-          const color   = CRIME_COLORS[crimeKey as keyof typeof CRIME_COLORS];
-          const r       = zona.radius * (0.4 + crimeRatio * 1.8);
-          const opacity = baseOpacity * crimeRatio * 2.2;
-          drawGradientCircle(map, zona.lat, zona.lng, r, color, Math.min(opacity, 0.75), layersRef);
-        });
+      if (hasSelection && !isSelected) {
+        // Localidades no seleccionadas: manto muy tenue gris
+        const ghost = L.polygon(polygon, {
+          fillColor: "#94a3b8",
+          fillOpacity: 0.08,
+          color: "#cbd5e1",
+          weight: 0.5,
+          opacity: 0.3,
+        }).addTo(map);
+        layersRef.current.push(ghost);
+        return;
       }
 
-      // Tooltip en el centro
-      const marker = L.circleMarker([zona.lat, zona.lng], {
-        radius: 6,
-        fillColor: "#112288",
-        fillOpacity: 0.85,
-        color: "white",
-        weight: 2,
+      // ── Manto de fondo por nivel de riesgo total ──
+      let bgColor = "#16a34a";
+      if (ratio > 0.70)      bgColor = "#dc2626";
+      else if (ratio > 0.45) bgColor = "#ea580c";
+      else if (ratio > 0.22) bgColor = "#d97706";
+
+      const bgOpacity = isSelected ? 0.22 : 0.15;
+      const mantoBg = L.polygon(polygon, {
+        fillColor: bgColor,
+        fillOpacity: bgOpacity,
+        color: isSelected ? "#112288" : "#ffffff",
+        weight: isSelected ? 2 : 0.8,
+        opacity: isSelected ? 0.9 : 0.5,
+        dashArray: isSelected ? "8 4" : undefined,
       }).addTo(map);
 
-      const totalStr = total > 0 ? total.toLocaleString("es-CO") : "Sin datos";
-      marker.bindTooltip(
-        `<div style="font-family:sans-serif;min-width:180px">
-          <div style="font-weight:700;font-size:13px;color:#112288;margin-bottom:5px">${zona.name}</div>
+      // Tooltip en el manto
+      const totalStr = total > 0 ? total.toLocaleString("es-CO") : "Sin datos SIEDCO";
+      mantoBg.bindTooltip(
+        `<div style="font-family:sans-serif;min-width:190px">
+          <div style="font-weight:700;font-size:13px;color:#112288;margin-bottom:5px">${nombre}</div>
           <div style="font-size:11px;color:#334155;line-height:1.9">
-            <span style="color:#e11d48">●</span> Hurto personas: <b>${Math.round(zona.crimes.personas * total).toLocaleString("es-CO")}</b><br/>
-            <span style="color:#7c3aed">●</span> Hurto residencias: <b>${Math.round(zona.crimes.residencias * total).toLocaleString("es-CO")}</b><br/>
-            <span style="color:#0284c7">●</span> Hurto automotores: <b>${Math.round(zona.crimes.autos * total).toLocaleString("es-CO")}</b><br/>
-            <span style="color:#d97706">●</span> Lesiones: <b>${Math.round(zona.crimes.lesiones * total).toLocaleString("es-CO")}</b><br/>
-            <span style="color:#ea580c">●</span> Violencia intrafamiliar: <b>${Math.round(zona.crimes.violencia * total).toLocaleString("es-CO")}</b>
+            <span style="color:${CRIME_COLORS.personas}">●</span> Hurto personas: <b>${Math.round(dist.personas * total).toLocaleString("es-CO")}</b><br/>
+            <span style="color:${CRIME_COLORS.residencias}">●</span> Hurto residencias: <b>${Math.round(dist.residencias * total).toLocaleString("es-CO")}</b><br/>
+            <span style="color:${CRIME_COLORS.autos}">●</span> Hurto automotores: <b>${Math.round(dist.autos * total).toLocaleString("es-CO")}</b><br/>
+            <span style="color:${CRIME_COLORS.lesiones}">●</span> Lesiones: <b>${Math.round(dist.lesiones * total).toLocaleString("es-CO")}</b><br/>
+            <span style="color:${CRIME_COLORS.violencia}">●</span> Violencia intrafamiliar: <b>${Math.round(dist.violencia * total).toLocaleString("es-CO")}</b>
           </div>
           <div style="margin-top:5px;padding-top:4px;border-top:1px solid #e2e8f0;font-size:10px;color:#64748b">
             Total: <b>${totalStr}</b>
           </div>
           <div style="font-size:9px;color:#94a3b8;margin-top:2px">SIEDCO · dic/2025</div>
         </div>`,
-        { direction: "top", opacity: 0.97 }
+        { direction: "top", sticky: true, opacity: 0.97 }
       );
-      layersRef.current.push(marker);
+      layersRef.current.push(mantoBg);
+
+      // ── Puntos de colores por tipo de delito dentro del polígono ──
+      if (crimeKey) {
+        // Modo filtro: solo un color, más puntos
+        const color  = CRIME_COLORS[crimeKey as keyof typeof CRIME_COLORS];
+        const ptCount = Math.round(20 + ratio * 60);
+        const seed   = nombre.charCodeAt(0) * 31 + (crimeKey.charCodeAt(0) || 1);
+        const points = generatePointsInPolygon(ring.map(p => [p[0], p[1]] as [number, number]), ptCount, seed);
+
+        points.forEach(([lat, lng]) => {
+          const pt = L.circleMarker([lat, lng], {
+            radius: 3 + Math.random() * 3,
+            fillColor: color,
+            fillOpacity: 0.65 + Math.random() * 0.25,
+            color: "transparent",
+            weight: 0,
+          }).addTo(map);
+          layersRef.current.push(pt);
+        });
+      } else {
+        // Modo general: puntos por cada tipo de delito proporcionales
+        Object.entries(dist).forEach(([cKey, cRatio]) => {
+          const color    = CRIME_COLORS[cKey as keyof typeof CRIME_COLORS];
+          const ptCount  = Math.round(cRatio * ratio * 80);
+          if (ptCount < 2) return;
+          const seed     = nombre.charCodeAt(0) * 31 + cKey.charCodeAt(0);
+          const points   = generatePointsInPolygon(ring.map(p => [p[0], p[1]] as [number, number]), ptCount, seed);
+
+          points.forEach(([lat, lng]) => {
+            const r  = 2.5 + Math.random() * 2.5;
+            const pt = L.circleMarker([lat, lng], {
+              radius: r,
+              fillColor: color,
+              fillOpacity: 0.55 + Math.random() * 0.35,
+              color: "transparent",
+              weight: 0,
+            }).addTo(map);
+            layersRef.current.push(pt);
+          });
+        });
+      }
     });
 
     return () => {
-      layersRef.current.forEach((l) => map.removeLayer(l));
+      layersRef.current.forEach(l => map.removeLayer(l));
       layersRef.current = [];
     };
-  }, [map, selectedLocalidad, hideRisks, selectedCrime, siedcoData]);
+  }, [map, geoData, selectedLocalidad, hideRisks, selectedCrime, siedcoData]);
 
   return null;
-}
-
-// Dibuja un círculo degradado con 4 anillos
-function drawGradientCircle(
-  map: L.Map,
-  lat: number, lng: number,
-  radius: number,
-  color: string,
-  maxOpacity: number,
-  layersRef: React.MutableRefObject<L.Layer[]>
-) {
-  const rings = [
-    { r: radius,        o: maxOpacity * 0.08 },
-    { r: radius * 0.70, o: maxOpacity * 0.20 },
-    { r: radius * 0.45, o: maxOpacity * 0.42 },
-    { r: radius * 0.22, o: maxOpacity * 0.80 },
-  ];
-  rings.forEach(({ r, o }) => {
-    const c = L.circle([lat, lng], {
-      radius: r,
-      fillColor: color,
-      fillOpacity: o,
-      color: "transparent",
-      weight: 0,
-    }).addTo(map);
-    layersRef.current.push(c);
-  });
 }
 
 // ── FlyTo ─────────────────────────────────────────────────────────────────────
@@ -213,7 +262,7 @@ function MapController({ data }: { data: LocalidadData | null }) {
   const map = useMap();
   useEffect(() => {
     if (!data) {
-      map.flyTo([4.6800, -74.0750], 12, { duration: 1.2 });
+      map.flyTo([4.7000, -74.0750], 12, { duration: 1.2 });
     } else {
       map.flyTo(data.center, data.zoom, { duration: 1.2, easeLinearity: 0.4 });
     }
@@ -306,7 +355,7 @@ export default function LeafletMap({ data, selectedCrime, mapIncidents, hideRisk
 
   return (
     <MapContainer
-      center={[4.6800, -74.0750]}
+      center={[4.7000, -74.0750]}
       zoom={12}
       style={{ height: "100%", width: "100%" }}
       scrollWheelZoom={true}
@@ -317,7 +366,7 @@ export default function LeafletMap({ data, selectedCrime, mapIncidents, hideRisk
       />
       <MapController data={data} />
       <ZoomWatcher onZoom={setZoom} />
-      <HeatLayer
+      <MapLayer
         selectedLocalidad={data?.name ?? ""}
         hideRisks={hideRisks}
         selectedCrime={selectedCrime}
