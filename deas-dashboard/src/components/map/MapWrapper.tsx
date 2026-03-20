@@ -2,7 +2,7 @@
 import dynamic from "next/dynamic";
 import type { LocalidadData } from "@/types";
 import type { Incidencia } from "@/components/bitacora/IncidenciasModule";
-import type { Cliente } from "@/components/map/ClientesLayer";
+import type { Cliente } from "@/components/ui/ClientesPanel";
 
 const DynamicMap = dynamic(() => import("./LeafletMap"), {
   ssr: false,
