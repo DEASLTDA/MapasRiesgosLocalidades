@@ -137,7 +137,7 @@ export default function SiedcoAdmin({ onClose, onDataUpdated }: Props) {
       ];
       setExisting(updated);
       onDataUpdated(updated);
-      setSaved((s) => [...new Set([...s, currentLocalidad])]);
+      setSaved((s) => Array.from(new Set([...s, currentLocalidad])));
 
       if (goNext && currentIdx < LOCALIDADES_DEAS.length - 1) {
         setCurrentIdx((i) => i + 1);
