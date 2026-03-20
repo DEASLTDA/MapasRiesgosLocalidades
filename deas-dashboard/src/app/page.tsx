@@ -40,16 +40,25 @@ export default function DashboardPage() {
   const [siedcoTotals, setSiedcoTotals]   = useState<Record<string, number>>({});
 
   // Cuando llegan datos de Sheets, actualiza la vista de la localidad seleccionada
+  const SIEDCO_SHEETS_URL = "https://script.google.com/macros/s/AKfycbzn1_4OIY__8s1kqKLWzJ29e_lwHXSq6Up2e30FMdS6EYsZGHP-AMW-OwyvD80xqrbc/exec";
+
   const handleSiedcoUpdate = useCallback((rows: SiedcoRow[]) => {
     setSiedcoData(rows);
-    // Calcular totales por localidad para el mapa de calor
     const totals: Record<string, number> = {};
     rows.forEach((r) => {
-      totals[r.localidad] = (r.hurto_personas || 0) + (r.hurto_residencias || 0) +
-        (r.hurto_autos || 0) + (r.lesiones || 0) + (r.violencia || 0);
+      totals[r.localidad] = (Number(r.hurto_personas) || 0) + (Number(r.hurto_residencias) || 0) +
+        (Number(r.hurto_autos) || 0) + (Number(r.lesiones) || 0) + (Number(r.violencia) || 0);
     });
     setSiedcoTotals(totals);
   }, []);
+
+  // Auto-cargar datos de SIEDCO al iniciar
+  useEffect(() => {
+    fetch(SIEDCO_SHEETS_URL + "?t=" + Date.now())
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data) && data.length > 0) handleSiedcoUpdate(data); })
+      .catch(() => {});
+  }, [handleSiedcoUpdate, SIEDCO_SHEETS_URL]);
 
   const buildDataFromSiedco = useCallback((loc: string, rows: SiedcoRow[]): LocalidadData | null => {
     const row = rows.find((r) => r.localidad === loc);
