@@ -2,6 +2,7 @@
 import dynamic from "next/dynamic";
 import type { LocalidadData } from "@/types";
 import type { Incidencia } from "@/components/bitacora/IncidenciasModule";
+import type { Cliente } from "@/components/map/ClientesLayer";
 
 const DynamicMap = dynamic(() => import("./LeafletMap"), {
   ssr: false,
@@ -22,9 +23,13 @@ interface Props {
   mapIncidents: Incidencia[];
   hideRisks: boolean;
   siedcoData?: Record<string, number>;
+  clientes?: Cliente[];
+  filtroCoord?: string;
+  clienteSel?: string;
+  onClienteClick?: (c: Cliente) => void;
 }
 
-export default function MapWrapper({ data, loading, selectedCrime, mapIncidents, hideRisks, siedcoData }: Props) {
+export default function MapWrapper({ data, loading, selectedCrime, mapIncidents, hideRisks, siedcoData, clientes = [], filtroCoord = "", clienteSel = "", onClienteClick }: Props) {
   return (
     <div className="relative h-full rounded-xl overflow-hidden shadow-card border border-blue-100">
       {loading && (
@@ -41,6 +46,10 @@ export default function MapWrapper({ data, loading, selectedCrime, mapIncidents,
         mapIncidents={mapIncidents}
         hideRisks={hideRisks}
         siedcoData={siedcoData}
+        clientes={clientes}
+        filtroCoord={filtroCoord}
+        clienteSel={clienteSel}
+        onClienteClick={onClienteClick}
       />
     </div>
   );
