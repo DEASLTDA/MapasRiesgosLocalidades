@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import type { LocalidadData } from "@/types";
 import type { Incidencia } from "@/components/bitacora/IncidenciasModule";
 import L from "leaflet";
+import ClientesLayer, { type Cliente } from "@/components/map/ClientesLayer";
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -376,9 +377,13 @@ interface Props {
   mapIncidents: Incidencia[];
   hideRisks: boolean;
   siedcoData?: Record<string, number>;
+  clientes?: Cliente[];
+  filtroCoord?: string;
+  clienteSel?: string;
+  onClienteClick?: (c: Cliente) => void;
 }
 
-export default function LeafletMap({ data, selectedCrime, mapIncidents, hideRisks, siedcoData = {} }: Props) {
+export default function LeafletMap({ data, selectedCrime, mapIncidents, hideRisks, siedcoData = {}, clientes = [], filtroCoord = "", clienteSel = "", onClienteClick }: Props) {
   const [zoom, setZoom] = useState(12);
 
   const validIncidents = mapIncidents.filter((i) => {
@@ -406,6 +411,14 @@ export default function LeafletMap({ data, selectedCrime, mapIncidents, hideRisk
         siedcoData={siedcoData}
       />
       <IncidentLayer incidents={validIncidents} zoom={zoom} />
+      {clientes.length > 0 && (
+        <ClientesLayer
+          clientes={clientes}
+          filtroCoordinador={filtroCoord}
+          clienteSeleccionado={clienteSel}
+          onClienteClick={onClienteClick ?? (() => {})}
+        />
+      )}
     </MapContainer>
   );
 }
