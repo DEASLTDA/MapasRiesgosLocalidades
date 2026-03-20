@@ -29,10 +29,34 @@ export interface Incidencia {
 const COORDINADORES = ["Javier Millan", "Luis Ceballos", "William Bocanegra", "Barbara Patiño", "Jorge Rodriguez"];
 
 const TIPOS_NOVEDAD = [
-  "Intento de ingreso no autorizado", "Robo / Hurto", "Vandalismo",
-  "Falla en sistema de acceso", "Falla en CCTV", "Incidente de convivencia",
-  "Emergencia médica", "Incendio / Alarma", "Persona sospechosa",
-  "Daño en instalaciones", "Otro",
+  "Hurto a personas",
+  "Atraco",
+  "Fleteo",
+  "Hurto a residencia",
+  "Hurto de vehículo",
+  "Hurto de motocicleta",
+  "Hurto a comercio",
+  "Hurto a establecimiento",
+  "Intento de hurto",
+  "Lesiones personales",
+  "Riña",
+  "Homicidio",
+  "Tentativa de homicidio",
+  "Violencia intrafamiliar",
+  "Amenazas",
+  "Extorsión",
+  "Secuestro",
+  "Accidente de tránsito",
+  "Daño a bien ajeno",
+  "Intrusión / Acceso no autorizado",
+  "Persona sospechosa",
+  "Alteración del orden",
+  "Emergencia médica",
+  "Incendio / Emergencia",
+  "Falla en sistema de acceso",
+  "Falla en CCTV",
+  "Daño en instalaciones",
+  "Otro",
 ];
 
 const LOCALIDADES = [
