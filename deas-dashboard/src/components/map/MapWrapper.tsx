@@ -21,9 +21,10 @@ interface Props {
   selectedCrime: string | null;
   mapIncidents: Incidencia[];
   hideRisks: boolean;
+  siedcoData?: Record<string, number>;
 }
 
-export default function MapWrapper({ data, loading, selectedCrime, mapIncidents, hideRisks }: Props) {
+export default function MapWrapper({ data, loading, selectedCrime, mapIncidents, hideRisks, siedcoData }: Props) {
   return (
     <div className="relative h-full rounded-xl overflow-hidden shadow-card border border-blue-100">
       {loading && (
@@ -39,6 +40,7 @@ export default function MapWrapper({ data, loading, selectedCrime, mapIncidents,
         selectedCrime={selectedCrime}
         mapIncidents={mapIncidents}
         hideRisks={hideRisks}
+        siedcoData={siedcoData}
       />
     </div>
   );
