@@ -188,7 +188,7 @@ export default function ClientesPanel({
                 style={active ? { color: cc.color } : {}}>
                 <span className="inline-block w-1.5 h-1.5 rounded-full mr-1"
                   style={{ backgroundColor: active ? cc.color : "white", opacity: active ? 1 : 0.6 }} />
-                {coord.split(" ")[0]} ({count})
+                {coord.split(" ")[0]} {coord.split(" ")[1]?.[0] ?? ""}. ({count})
               </button>
             );
           })}
