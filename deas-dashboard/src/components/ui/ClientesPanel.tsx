@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Building2, Search, X, RefreshCw, ChevronDown, Plus, Save } from "lucide-react";
 
-const CLIENTES_URL = "https://script.google.com/macros/s/AKfycbwKLD6lBytIor_rl86zPhYRfPib2VaE1jnK4c5I2tbBV9HVKW0GI1dS-hAtcDq9ooPu/exec";
+const CLIENTES_URL = "https://script.google.com/macros/s/AKfycbwKhEVuer0zLTRHoEyO1soLQWfp6Gn5cYiMzKqz0RDg3bLBEblqiyqRJBJ9JExAs9kV/exec";
 
 export const COORD_COLORS: Record<string, { color: string }> = {
   "JAVIER MILLAN":    { color: "#2563eb" },
