@@ -21,7 +21,8 @@ const CRIME_COLORS = {
   residencias: { hex: "#7c3aed", rgb: "124,58,237" },
   autos:       { hex: "#0284c7", rgb: "2,132,199" },
   lesiones:    { hex: "#d97706", rgb: "217,119,6" },
-  violencia:   { hex: "#991b1b", rgb: "153,27,27" },
+  homicidios:  { hex: "#991b1b", rgb: "153,27,27" },
+  extorsion:   { hex: "#ea580c", rgb: "234,88,12" },
 };
 
 const NOMBRE_MAP: Record<string, string> = {
