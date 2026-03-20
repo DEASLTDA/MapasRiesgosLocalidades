@@ -76,72 +76,39 @@ function generatePointsInPolygon(ring: number[][], count: number, seed: number):
 
 // ── Canvas Heatmap Layer ──────────────────────────────────────────────────────
 // Dibuja manchas difuminadas usando Canvas superpuesto al mapa
-const HeatBlobs = L.Layer.extend({
-  initialize(options: {
-    points: { lat: number; lng: number; rgb: string; intensity: number }[];
-    radius: number;
-  }) {
-    L.setOptions(this, options);
-    this._points = options.points;
-    this._radius = options.radius;
-  },
+// ── Dibuja manchas difuminadas con círculos Leaflet (sin canvas) ─────────────
+function drawBlobs(
+  map: L.Map,
+  points: { lat: number; lng: number; rgb: string; intensity: number }[],
+  layersRef: React.MutableRefObject<L.Layer[]>
+) {
+  const zoom   = map.getZoom();
+  const radius = zoom <= 10 ? 600 : zoom <= 11 ? 900 : zoom <= 12 ? 1300 : zoom <= 13 ? 1800 : zoom <= 14 ? 2400 : 3200;
 
-  onAdd(map: L.Map) {
-    this._map = map;
-    this._canvas = L.DomUtil.create("canvas", "leaflet-heat-blob-layer");
-    Object.assign(this._canvas.style, {
-      position: "absolute", top: "0", left: "0",
-      pointerEvents: "none", zIndex: "400",
-      display: "block",
+  points.forEach(pt => {
+    // Extraer color hex desde rgb string
+    const [r, g, b] = pt.rgb.split(",").map(Number);
+    const hex = "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("");
+
+    // 3 anillos concéntricos por punto para efecto difuminado
+    const rings = [
+      { r: radius,        o: pt.intensity * 0.08 },
+      { r: radius * 0.6,  o: pt.intensity * 0.18 },
+      { r: radius * 0.28, o: pt.intensity * 0.40 },
+    ];
+    rings.forEach(({ r: rad, o }) => {
+      const c = L.circle([pt.lat, pt.lng], {
+        radius: rad,
+        fillColor: hex,
+        fillOpacity: o,
+        color: "transparent",
+        weight: 0,
+        interactive: false,
+      }).addTo(map);
+      layersRef.current.push(c);
     });
-    map.getPanes().overlayPane.appendChild(this._canvas);
-    map.on("moveend zoomend resize", this._redraw, this);
-    map.on("move zoom", this._redraw, this);
-    this._redraw();
-    return this;
-  },
-
-  onRemove(map: L.Map) {
-    map.off("moveend zoomend resize move zoom", this._redraw, this);
-    L.DomUtil.remove(this._canvas);
-  },
-
-  _redraw() {
-    const map    = this._map;
-    const canvas = this._canvas as HTMLCanvasElement;
-
-    // Usar el tamaño del contenedor del mapa
-    const pane = map.getPanes().overlayPane;
-    const w    = pane.offsetWidth  || map.getSize().x;
-    const h    = pane.offsetHeight || map.getSize().y;
-    canvas.width  = w;
-    canvas.height = h;
-    canvas.style.left = "0px";
-    canvas.style.top  = "0px";
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, w, h);
-
-    const zoom = map.getZoom ? map.getZoom() : 12;
-    const r = zoom <= 10 ? 20 : zoom <= 11 ? 28 : zoom <= 12 ? 40 : zoom <= 13 ? 55 : zoom <= 14 ? 72 : 95;
-    const opMod = zoom <= 10 ? 0.25 : zoom <= 11 ? 0.35 : zoom <= 12 ? 0.50 : zoom <= 13 ? 0.65 : 1.0;
-    (this._points as { lat: number; lng: number; rgb: string; intensity: number }[]).forEach(pt => {
-      const latlng = L.latLng(pt.lat, pt.lng);
-      const px = map.latLngToLayerPoint(latlng);
-      if (px.x < -r || px.x > w + r || px.y < -r || px.y > h + r) return;
-      const intensity = pt.intensity * opMod;
-      const grad = ctx.createRadialGradient(px.x, px.y, 0, px.x, px.y, r);
-      grad.addColorStop(0,    `rgba(${pt.rgb},${intensity})`);
-      grad.addColorStop(0.45, `rgba(${pt.rgb},${intensity * 0.4})`);
-      grad.addColorStop(1,    `rgba(${pt.rgb},0)`);
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(px.x, px.y, r, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  },
-});
+  });
+}
 
 interface ArcGISFeature {
   attributes: Record<string, string | number>;
@@ -173,7 +140,7 @@ function MapLayer({
     if (hideRisks || geoData.length === 0) return;
 
     const hasSelection = selectedLocalidad !== "";
-    const maxTotal = Math.max(...Object.values(siedcoData), 5000);
+    const maxTotal = Math.max(...Object.values(siedcoData), 1000);
 
     const crimeKey = selectedCrime
       ? selectedCrime.toLowerCase().includes("personas")    ? "personas"
@@ -193,7 +160,7 @@ function MapLayer({
 
       const isSelected = nombre === selectedLocalidad;
       const total      = siedcoData[nombre] || 0;
-      const ratio      = total > 0 ? total / maxTotal : 0.25;
+      const ratio      = total > 0 ? total / maxTotal : 0.30; // mínimo 30% para siempre mostrar manchas
       const dist       = CRIME_DIST[nombre] ?? CRIME_DIST["Usaquén"];
       const ring       = feature.geometry.rings[0];
       if (!ring || ring.length < 3) return;
@@ -269,23 +236,9 @@ function MapLayer({
       }
     });
 
-    // Crear capa canvas con todas las manchas difuminadas
+    // Dibujar manchas difuminadas con círculos Leaflet (sin canvas, sin artefactos)
     if (allBlobPoints.length > 0) {
-      const zoom = map.getZoom();
-      // Radio decrece con zoom out, opacidad también
-      const radius     = zoom <= 10 ? 20 : zoom <= 11 ? 28 : zoom <= 12 ? 40 : zoom <= 13 ? 55 : zoom <= 14 ? 72 : 95;
-      const opacityMod = zoom <= 10 ? 0.25 : zoom <= 11 ? 0.35 : zoom <= 12 ? 0.50 : zoom <= 13 ? 0.65 : 1.0;
-
-      // Ajustar opacidad de todos los puntos según zoom
-      const adjustedPoints = allBlobPoints.map(p => ({
-        ...p,
-        intensity: p.intensity * opacityMod,
-      }));
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const blobLayer = new (HeatBlobs as any)({ points: adjustedPoints, radius });
-      blobLayer.addTo(map);
-      layersRef.current.push(blobLayer);
+      drawBlobs(map, allBlobPoints, layersRef);
     }
 
     return () => {
