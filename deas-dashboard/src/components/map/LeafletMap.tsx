@@ -87,43 +87,51 @@ const HeatBlobs = L.Layer.extend({
   onAdd(map: L.Map) {
     this._map = map;
     this._canvas = L.DomUtil.create("canvas", "leaflet-heat-blob-layer");
-    const size = map.getSize();
-    this._canvas.width  = size.x;
-    this._canvas.height = size.y;
     Object.assign(this._canvas.style, {
       position: "absolute", top: "0", left: "0",
       pointerEvents: "none", zIndex: "400",
     });
     map.getPanes().overlayPane.appendChild(this._canvas);
-    map.on("moveend zoomend", this._redraw, this);
+    map.on("moveend zoomend resize", this._redraw, this);
+    map.on("move zoom", this._redraw, this);
     this._redraw();
     return this;
   },
 
   onRemove(map: L.Map) {
-    map.off("moveend zoomend", this._redraw, this);
+    map.off("moveend zoomend resize move zoom", this._redraw, this);
     L.DomUtil.remove(this._canvas);
   },
 
   _redraw() {
     const map    = this._map;
     const canvas = this._canvas as HTMLCanvasElement;
-    const size   = map.getSize();
-    canvas.width  = size.x;
-    canvas.height = size.y;
+
+    // Usar el tamaño del contenedor del mapa
+    const mapContainer = map.getContainer();
+    const w = mapContainer.offsetWidth;
+    const h = mapContainer.offsetHeight;
+    canvas.width  = w;
+    canvas.height = h;
+
+    // Posicionar el canvas en la esquina superior izquierda del mapa
+    const bounds = mapContainer.getBoundingClientRect();
+    const pane   = map.getPanes().overlayPane;
+    const paneBounds = pane.getBoundingClientRect();
+    canvas.style.left = (bounds.left - paneBounds.left) + "px";
+    canvas.style.top  = (bounds.top  - paneBounds.top)  + "px";
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.clearRect(0, 0, size.x, size.y);
-
-    const topLeft = map.containerPointToLayerPoint([0, 0]);
-    L.DomUtil.setPosition(canvas, topLeft);
+    ctx.clearRect(0, 0, w, h);
 
     const r = this._radius;
     (this._points as { lat: number; lng: number; rgb: string; intensity: number }[]).forEach(pt => {
       const px = map.latLngToContainerPoint([pt.lat, pt.lng]);
+      if (px.x < -r || px.x > w + r || px.y < -r || px.y > h + r) return;
       const grad = ctx.createRadialGradient(px.x, px.y, 0, px.x, px.y, r);
       grad.addColorStop(0,   `rgba(${pt.rgb},${pt.intensity})`);
-      grad.addColorStop(0.4, `rgba(${pt.rgb},${pt.intensity * 0.5})`);
+      grad.addColorStop(0.45, `rgba(${pt.rgb},${pt.intensity * 0.4})`);
       grad.addColorStop(1,   `rgba(${pt.rgb},0)`);
       ctx.fillStyle = grad;
       ctx.beginPath();
