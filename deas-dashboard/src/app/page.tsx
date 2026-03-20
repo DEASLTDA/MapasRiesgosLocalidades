@@ -8,7 +8,9 @@ import RiskGauge from "@/components/charts/RiskGauge";
 import CrimeBarChart from "@/components/charts/CrimeBarChart";
 import IncidenciasModule, { Incidencia } from "@/components/bitacora/IncidenciasModule";
 import SiedcoAdmin from "@/components/ui/SiedcoAdmin";
+import ClientesPanel from "@/components/ui/ClientesPanel";
 import { fetchCrimeData } from "@/lib/crimeData";
+import type { Cliente } from "@/components/map/ClientesLayer";
 import type { LocalidadData } from "@/types";
 
 // ── Constantes fuera del componente ──────────────────────────────────────────
@@ -96,6 +98,10 @@ export default function DashboardPage() {
   const [showAdmin, setShowAdmin]         = useState(false);
   const [siedcoRows, setSiedcoRows]       = useState<SiedcoRow[]>([]);
   const [siedcoTotals, setSiedcoTotals]   = useState<Record<string, number>>({});
+  const [clientes, setClientes]           = useState<Cliente[]>([]);
+  const [clientesVisible, setClientesVisible] = useState(false);
+  const [filtroCoord, setFiltroCoord]     = useState("");
+  const [clienteSel, setClienteSel]       = useState("");
 
   // Actualiza totales para el mapa y recalcula data si hay localidad activa
   const applySiedcoRows = useCallback((rows: SiedcoRow[]) => {
@@ -154,6 +160,11 @@ export default function DashboardPage() {
 
   const handleShowInMap = (incidents: Incidencia[]) => {
     setMapIncidents(mapIncidents.length > 0 ? [] : incidents);
+  };
+
+  const handleShowClientes = (data: Cliente[]) => {
+    setClientes(data);
+    setClientesVisible(data.length > 0);
   };
 
   return (
@@ -230,6 +241,10 @@ export default function DashboardPage() {
                 mapIncidents={mapIncidents}
                 hideRisks={hideRisks}
                 siedcoData={siedcoTotals}
+                clientes={clientesVisible ? clientes : []}
+                filtroCoord={filtroCoord}
+                clienteSel={clienteSel}
+                onClienteClick={(c) => setClienteSel(c.nombre === clienteSel ? "" : c.nombre)}
               />
             </div>
           </div>
@@ -253,6 +268,16 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+
+        {/* Clientes */}
+        <ClientesPanel
+          onShowClientes={handleShowClientes}
+          onFiltroChange={setFiltroCoord}
+          onClienteSelect={setClienteSel}
+          clientesVisible={clientesVisible}
+          filtroActual={filtroCoord}
+          clienteSeleccionado={clienteSel}
+        />
 
         {/* Incidencias */}
         <IncidenciasModule
