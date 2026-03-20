@@ -3,24 +3,16 @@ import { useEffect, useRef } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";
 
-export const CLIENTES_URL = "https://script.google.com/macros/s/AKfycbwKLD6lBytIor_rl86zPhYRfPib2VaE1jnK4c5I2tbBV9HVKW0GI1dS-hAtcDq9ooPu/exec";
+import type { Cliente } from "@/components/ui/ClientesPanel";
+export type { Cliente };
 
-export const COORD_COLORS: Record<string, { color: string; rgb: string }> = {
-  "JAVIER MILLAN":    { color: "#2563eb", rgb: "37,99,235" },
-  "LUIS CEBALLOS":    { color: "#16a34a", rgb: "22,163,74" },
-  "WILLIAM BOCANEGRA":{ color: "#dc2626", rgb: "220,38,38" },
-  "LUIS MARTINEZ":    { color: "#9333ea", rgb: "147,51,234" },
-  "DEIVY VARGAS":     { color: "#ea580c", rgb: "234,88,12" },
+const COORD_COLORS: Record<string, { color: string }> = {
+  "JAVIER MILLAN":    { color: "#2563eb" },
+  "LUIS CEBALLOS":    { color: "#16a34a" },
+  "WILLIAM BOCANEGRA":{ color: "#dc2626" },
+  "LUIS MARTINEZ":    { color: "#9333ea" },
+  "DEIVY VARGAS":     { color: "#ea580c" },
 };
-
-export interface Cliente {
-  nombre: string;
-  direccion: string;
-  coordinador: string;
-  localidad?: string;
-  lat: number | string;
-  long: number | string;
-}
 
 interface Props {
   clientes: Cliente[];
