@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import type { LocalidadData } from "@/types";
 import type { Incidencia } from "@/components/bitacora/IncidenciasModule";
-import { toGeoJSON, MAX_TOTAL } from "@/lib/bogotaGeoJson";
+import { BOGOTA_LOCALIDADES } from "@/lib/bogotaGeoJson";
 import L from "leaflet";
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -20,93 +20,144 @@ const GRAVEDAD_COLORS: Record<string, string> = {
   baja:    "#16a34a",
 };
 
-// ── Choropleth con GeoJSON local (sin API externa) ────────────────────────────
-function ChoroplethLayer({ selectedLocalidad, hideRisks }: { selectedLocalidad: string; hideRisks: boolean }) {
+// Localidades DEAS con centros exactos y radios de influencia
+const DEAS_LOCALIDADES = [
+  { name: "Usaquén",        lat: 4.7050, lng: -74.0317, radius: 4500 },
+  { name: "Chapinero",      lat: 4.6490, lng: -74.0630, radius: 3200 },
+  { name: "Santa Fe",       lat: 4.6100, lng: -74.0700, radius: 2800 },
+  { name: "Suba",           lat: 4.7380, lng: -74.0850, radius: 5500 },
+  { name: "Barrios Unidos", lat: 4.6680, lng: -74.0820, radius: 2500 },
+  { name: "Teusaquillo",    lat: 4.6440, lng: -74.0920, radius: 2600 },
+];
+
+// ── Capa de círculos difuminados usando Canvas ────────────────────────────────
+function HeatZoneLayer({
+  selectedLocalidad,
+  hideRisks,
+  siedcoData,
+}: {
+  selectedLocalidad: string;
+  hideRisks: boolean;
+  siedcoData: Record<string, number>;
+}) {
   const map = useMap();
-  const layerRef = useRef<L.GeoJSON | null>(null);
+  const canvasRef = useRef<L.Canvas | null>(null);
+  const layersRef = useRef<L.CircleMarker[]>([]);
 
   useEffect(() => {
-    if (layerRef.current) {
-      map.removeLayer(layerRef.current);
-      layerRef.current = null;
-    }
+    // Limpiar capas anteriores
+    layersRef.current.forEach((l) => map.removeLayer(l));
+    layersRef.current = [];
     if (hideRisks) return;
 
-    const geojson = toGeoJSON();
+    const hasSelection = selectedLocalidad !== "";
 
-    layerRef.current = L.geoJSON(geojson as Parameters<typeof L.geoJSON>[0], {
-      style: (feature) => {
-        if (!feature) return {};
-        const name      = feature.properties.name as string;
-        const isSelected = name === selectedLocalidad;
-        const total     = feature.properties.total as number;
-        const ratio     = total / MAX_TOTAL;
+    // Calcular max para normalizar
+    const maxTotal = Math.max(
+      ...DEAS_LOCALIDADES.map((loc) => siedcoData[loc.name] || loc.radius * 2)
+    );
 
-        let fillColor = "#16a34a";
-        if (ratio > 0.70)      fillColor = "#dc2626";
-        else if (ratio > 0.45) fillColor = "#ea580c";
-        else if (ratio > 0.22) fillColor = "#d97706";
+    DEAS_LOCALIDADES.forEach((loc) => {
+      const isSelected = loc.name === selectedLocalidad;
+      const total      = siedcoData[loc.name] || 0;
+      const ratio      = total > 0 ? total / maxTotal : 0.3;
 
-        return {
-          fillColor,
-          fillOpacity: isSelected ? 0.80 : 0.50,
-          color:       isSelected ? "#112288" : "#ffffff",
-          weight:      isSelected ? 2.5 : 0.8,
-          opacity:     1,
-        };
-      },
-      onEachFeature: (feature, layer) => {
-        const p = feature.properties;
-        layer.bindTooltip(
-          `<div style="font-family:sans-serif;min-width:180px;padding:2px">
-            <div style="font-weight:700;font-size:13px;color:#112288;margin-bottom:5px">${p.name}</div>
-            <div style="font-size:11px;color:#334155;line-height:1.8">
-              👤 Hurto a personas: <b>${(p.hurtoPersonas as number).toLocaleString("es-CO")}</b><br/>
-              🏠 Hurto a residencias: <b>${(p.hurtoResidencias as number).toLocaleString("es-CO")}</b><br/>
-              🚗 Hurto automotores: <b>${(p.hurtoAutos as number).toLocaleString("es-CO")}</b><br/>
-              🤕 Lesiones personales: <b>${(p.lesiones as number).toLocaleString("es-CO")}</b><br/>
-              👊 Violencia intrafamiliar: <b>${(p.violencia as number).toLocaleString("es-CO")}</b>
-            </div>
-            <div style="margin-top:5px;padding-top:4px;border-top:1px solid #e2e8f0;font-size:10px;color:#64748b">
-              Total delitos: <b>${(p.total as number).toLocaleString("es-CO")}</b>
-            </div>
-            <div style="font-size:9px;color:#94a3b8;margin-top:2px">SIEDCO · Sec. Distrital Seguridad · Corte dic/2025</div>
-          </div>`,
-          { direction: "top", sticky: true, opacity: 0.98 }
-        );
+      // Color según intensidad
+      let color = "#16a34a";
+      if (ratio > 0.70)      color = "#dc2626";
+      else if (ratio > 0.45) color = "#ea580c";
+      else if (ratio > 0.22) color = "#d97706";
 
-        // Resaltar al hover
-        layer.on("mouseover", () => {
-          (layer as L.Path).setStyle({ fillOpacity: 0.85, weight: 2 });
-        });
-        layer.on("mouseout", () => {
-          layerRef.current?.resetStyle(layer);
-        });
-      },
-    }).addTo(map);
+      if (hasSelection && !isSelected) {
+        // Otras localidades: muy tenues
+        // Círculo exterior muy difuminado
+        const ghost = L.circleMarker([loc.lat, loc.lng], {
+          radius: 60,
+          fillColor: "#94a3b8",
+          fillOpacity: 0.06,
+          color: "transparent",
+          weight: 0,
+        }).addTo(map);
+        layersRef.current.push(ghost);
+        return;
+      }
+
+      const opacity = isSelected ? 0.90 : 0.55;
+      const radiusPx = isSelected ? 75 : 55;
+
+      // 4 círculos concéntricos que crean efecto degradado
+      const layers = [
+        { r: radiusPx,        o: opacity * 0.12 },
+        { r: radiusPx * 0.75, o: opacity * 0.22 },
+        { r: radiusPx * 0.50, o: opacity * 0.40 },
+        { r: radiusPx * 0.28, o: opacity * 0.75 },
+      ];
+
+      layers.forEach(({ r, o }) => {
+        const circle = L.circleMarker([loc.lat, loc.lng], {
+          radius: r,
+          fillColor: color,
+          fillOpacity: o,
+          color: "transparent",
+          weight: 0,
+        }).addTo(map);
+
+        // Tooltip solo en el círculo central
+        if (r === radiusPx * 0.28) {
+          const totalStr = total > 0 ? total.toLocaleString("es-CO") : "Sin datos";
+          circle.bindTooltip(
+            `<div style="font-family:sans-serif;min-width:170px">
+              <div style="font-weight:700;font-size:13px;color:#112288;margin-bottom:4px">${loc.name}</div>
+              <div style="font-size:11px;color:#334155;line-height:1.8">
+                Total delitos registrados: <b>${totalStr}</b>
+              </div>
+              <div style="font-size:9px;color:#94a3b8;margin-top:3px">
+                SIEDCO · Sec. Distrital de Seguridad · dic/2025
+              </div>
+            </div>`,
+            { direction: "top", sticky: false, opacity: 0.97 }
+          );
+        }
+
+        layersRef.current.push(circle);
+      });
+
+      // Borde sutil en localidad seleccionada
+      if (isSelected) {
+        const border = L.circleMarker([loc.lat, loc.lng], {
+          radius: radiusPx,
+          fillColor: "transparent",
+          fillOpacity: 0,
+          color,
+          weight: 2,
+          opacity: 0.4,
+        }).addTo(map);
+        layersRef.current.push(border);
+      }
+    });
 
     return () => {
-      if (layerRef.current) {
-        map.removeLayer(layerRef.current);
-        layerRef.current = null;
-      }
+      layersRef.current.forEach((l) => map.removeLayer(l));
+      layersRef.current = [];
     };
-  }, [map, selectedLocalidad, hideRisks]);
+  }, [map, selectedLocalidad, hideRisks, siedcoData]);
 
   return null;
 }
 
-// ── FlyTo cuando cambia localidad ─────────────────────────────────────────────
+// ── FlyTo ─────────────────────────────────────────────────────────────────────
 function MapController({ data }: { data: LocalidadData | null }) {
   const map = useMap();
   useEffect(() => {
-    if (!data) return;
-    map.flyTo(data.center, data.zoom, { duration: 1.2, easeLinearity: 0.4 });
+    if (!data) {
+      map.flyTo([4.6800, -74.0750], 12, { duration: 1.2 });
+    } else {
+      map.flyTo(data.center, data.zoom, { duration: 1.2, easeLinearity: 0.4 });
+    }
   }, [data, map]);
   return null;
 }
 
-// ── Zoom watcher ──────────────────────────────────────────────────────────────
 function ZoomWatcher({ onZoom }: { onZoom: (z: number) => void }) {
   const map = useMap();
   useEffect(() => {
@@ -131,7 +182,7 @@ function IncidentLayer({ incidents, zoom }: { incidents: Incidencia[]; zoom: num
     }
 
     const size = zoom <= 11 ? 22 : zoom <= 12 ? 28 : zoom <= 13 ? 34 : zoom <= 14 ? 40 : zoom <= 15 ? 46 : 54;
-    const h = Math.round(size * 1.35);
+    const h    = Math.round(size * 1.35);
 
     incidents.forEach((inc) => {
       const lat = parseFloat(String(inc.lat).replace(",", "."));
@@ -139,7 +190,7 @@ function IncidentLayer({ incidents, zoom }: { incidents: Incidencia[]; zoom: num
       if (isNaN(lat) || isNaN(lng) || Math.abs(lat) < 0.001) return;
 
       const color = GRAVEDAD_COLORS[inc.gravedad] ?? "#64748b";
-      const icon = L.divIcon({
+      const icon  = L.divIcon({
         className: "",
         iconSize:   [size, h],
         iconAnchor: [size / 2, h],
@@ -172,17 +223,17 @@ function IncidentLayer({ incidents, zoom }: { incidents: Incidencia[]; zoom: num
   return null;
 }
 
-// ── Componente principal ──────────────────────────────────────────────────────
+// ── Principal ─────────────────────────────────────────────────────────────────
 interface Props {
   data: LocalidadData | null;
   selectedCrime: string | null;
   mapIncidents: Incidencia[];
   hideRisks: boolean;
+  siedcoData?: Record<string, number>;
 }
 
-export default function LeafletMap({ data, mapIncidents, hideRisks }: Props) {
-  const initial: [number, number] = [4.6510, -74.0983];
-  const [zoom, setZoom] = useState(11);
+export default function LeafletMap({ data, mapIncidents, hideRisks, siedcoData = {} }: Props) {
+  const [zoom, setZoom] = useState(12);
 
   const validIncidents = mapIncidents.filter((i) => {
     const lat = parseFloat(String(i.lat).replace(",", "."));
@@ -192,22 +243,22 @@ export default function LeafletMap({ data, mapIncidents, hideRisks }: Props) {
 
   return (
     <MapContainer
-      center={initial}
-      zoom={11}
+      center={[4.6800, -74.0750]}
+      zoom={12}
       style={{ height: "100%", width: "100%" }}
       scrollWheelZoom={true}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"
-      />
-      <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"
-        zIndex={10}
+        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
       />
       <MapController data={data} />
       <ZoomWatcher onZoom={setZoom} />
-      <ChoroplethLayer selectedLocalidad={data?.name ?? ""} hideRisks={hideRisks} />
+      <HeatZoneLayer
+        selectedLocalidad={data?.name ?? ""}
+        hideRisks={hideRisks}
+        siedcoData={siedcoData}
+      />
       <IncidentLayer incidents={validIncidents} zoom={zoom} />
     </MapContainer>
   );
