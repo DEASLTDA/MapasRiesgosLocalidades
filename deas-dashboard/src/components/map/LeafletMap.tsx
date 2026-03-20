@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { MapContainer, TileLayer, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, useMap, Circle } from "react-leaflet";
 import type { LocalidadData } from "@/types";
 import type { Incidencia } from "@/components/bitacora/IncidenciasModule";
 import { BOGOTA_LOCALIDADES } from "@/lib/bogotaGeoJson";
@@ -71,10 +71,10 @@ function HeatZoneLayer({
       if (hasSelection && !isSelected) {
         // Otras localidades: muy tenues
         // Círculo exterior muy difuminado
-        const ghost = L.circleMarker([loc.lat, loc.lng], {
-          radius: 60,
+        const ghost = L.circle([loc.lat, loc.lng], {
+          radius: loc.radius * 0.8,
           fillColor: "#94a3b8",
-          fillOpacity: 0.06,
+          fillOpacity: 0.05,
           color: "transparent",
           weight: 0,
         }).addTo(map);
@@ -85,16 +85,30 @@ function HeatZoneLayer({
       const opacity = isSelected ? 0.90 : 0.55;
       const radiusPx = isSelected ? 75 : 55;
 
-      // 4 círculos concéntricos que crean efecto degradado
-      const layers = [
-        { r: radiusPx,        o: opacity * 0.12 },
-        { r: radiusPx * 0.75, o: opacity * 0.22 },
-        { r: radiusPx * 0.50, o: opacity * 0.40 },
-        { r: radiusPx * 0.28, o: opacity * 0.75 },
+      // Radio base en metros reales (escala con zoom)
+      const baseRadius = isSelected ? loc.radius * 1.2 : loc.radius;
+      const totalStr   = total > 0 ? total.toLocaleString("es-CO") : "Sin datos";
+
+      const tooltipHtml = `<div style="font-family:sans-serif;min-width:170px">
+        <div style="font-weight:700;font-size:13px;color:#112288;margin-bottom:4px">${loc.name}</div>
+        <div style="font-size:11px;color:#334155;line-height:1.8">
+          Total delitos registrados: <b>${totalStr}</b>
+        </div>
+        <div style="font-size:9px;color:#94a3b8;margin-top:3px">
+          SIEDCO · Sec. Distrital de Seguridad · dic/2025
+        </div>
+      </div>`;
+
+      // 4 círculos concéntricos en metros reales → escalan con el zoom
+      const rings = [
+        { r: baseRadius,        o: opacity * 0.10 },
+        { r: baseRadius * 0.72, o: opacity * 0.20 },
+        { r: baseRadius * 0.48, o: opacity * 0.38 },
+        { r: baseRadius * 0.26, o: opacity * 0.70 },
       ];
 
-      layers.forEach(({ r, o }) => {
-        const circle = L.circleMarker([loc.lat, loc.lng], {
+      rings.forEach(({ r, o }, idx) => {
+        const circle = L.circle([loc.lat, loc.lng], {
           radius: r,
           fillColor: color,
           fillOpacity: o,
@@ -102,35 +116,22 @@ function HeatZoneLayer({
           weight: 0,
         }).addTo(map);
 
-        // Tooltip solo en el círculo central
-        if (r === radiusPx * 0.28) {
-          const totalStr = total > 0 ? total.toLocaleString("es-CO") : "Sin datos";
-          circle.bindTooltip(
-            `<div style="font-family:sans-serif;min-width:170px">
-              <div style="font-weight:700;font-size:13px;color:#112288;margin-bottom:4px">${loc.name}</div>
-              <div style="font-size:11px;color:#334155;line-height:1.8">
-                Total delitos registrados: <b>${totalStr}</b>
-              </div>
-              <div style="font-size:9px;color:#94a3b8;margin-top:3px">
-                SIEDCO · Sec. Distrital de Seguridad · dic/2025
-              </div>
-            </div>`,
-            { direction: "top", sticky: false, opacity: 0.97 }
-          );
+        if (idx === 0) {
+          circle.bindTooltip(tooltipHtml, { direction: "top", sticky: true, opacity: 0.97 });
         }
-
         layersRef.current.push(circle);
       });
 
-      // Borde sutil en localidad seleccionada
+      // Borde exterior sutil
       if (isSelected) {
-        const border = L.circleMarker([loc.lat, loc.lng], {
-          radius: radiusPx,
+        const border = L.circle([loc.lat, loc.lng], {
+          radius: baseRadius,
           fillColor: "transparent",
           fillOpacity: 0,
           color,
-          weight: 2,
-          opacity: 0.4,
+          weight: 1.5,
+          opacity: 0.35,
+          dashArray: "6 4",
         }).addTo(map);
         layersRef.current.push(border);
       }
