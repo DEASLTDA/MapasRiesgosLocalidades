@@ -1,6 +1,6 @@
 "use client";
 import { MapPin, ChevronDown } from "lucide-react";
-import { LOCALIDADES_LIST } from "@/lib/crimeData";
+const LOCALIDADES_DEAS = ["Usaquén","Chapinero","Santa Fe","Suba","Barrios Unidos","Teusaquillo"];
 
 interface Props {
   value: string;
@@ -29,7 +29,7 @@ export default function LocalidadSelector({ value, onChange, loading }: Props) {
               disabled:opacity-50 disabled:cursor-wait
             "
           >
-            {LOCALIDADES_LIST.map((loc) => (
+            {LOCALIDADES_DEAS.map((loc) => (
               <option key={loc} value={loc}>{loc}</option>
             ))}
           </select>
