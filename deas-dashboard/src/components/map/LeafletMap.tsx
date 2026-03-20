@@ -111,19 +111,13 @@ const HeatBlobs = L.Layer.extend({
     const canvas = this._canvas as HTMLCanvasElement;
 
     // Usar el tamaño del contenedor del mapa
-    const mapContainer = map.getContainer();
-    const pad = 2; // padding para evitar artefactos en bordes
-    const w = mapContainer.offsetWidth  + pad * 2;
-    const h = mapContainer.offsetHeight + pad * 2;
+    const pane = map.getPanes().overlayPane;
+    const w    = pane.offsetWidth  || map.getSize().x;
+    const h    = pane.offsetHeight || map.getSize().y;
     canvas.width  = w;
     canvas.height = h;
-
-    // Posicionar el canvas incluyendo el padding negativo
-    const bounds     = mapContainer.getBoundingClientRect();
-    const pane       = map.getPanes().overlayPane;
-    const paneBounds = pane.getBoundingClientRect();
-    canvas.style.left = (bounds.left - paneBounds.left - pad) + "px";
-    canvas.style.top  = (bounds.top  - paneBounds.top  - pad) + "px";
+    canvas.style.left = "0px";
+    canvas.style.top  = "0px";
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -133,7 +127,8 @@ const HeatBlobs = L.Layer.extend({
     const r = zoom <= 10 ? 20 : zoom <= 11 ? 28 : zoom <= 12 ? 40 : zoom <= 13 ? 55 : zoom <= 14 ? 72 : 95;
     const opMod = zoom <= 10 ? 0.25 : zoom <= 11 ? 0.35 : zoom <= 12 ? 0.50 : zoom <= 13 ? 0.65 : 1.0;
     (this._points as { lat: number; lng: number; rgb: string; intensity: number }[]).forEach(pt => {
-      const px = map.latLngToContainerPoint([pt.lat, pt.lng]);
+      const latlng = L.latLng(pt.lat, pt.lng);
+      const px = map.latLngToLayerPoint(latlng);
       if (px.x < -r || px.x > w + r || px.y < -r || px.y > h + r) return;
       const intensity = pt.intensity * opMod;
       const grad = ctx.createRadialGradient(px.x, px.y, 0, px.x, px.y, r);
