@@ -9,7 +9,6 @@ import CrimeBarChart from "@/components/charts/CrimeBarChart";
 import IncidenciasModule, { Incidencia } from "@/components/bitacora/IncidenciasModule";
 import SiedcoAdmin from "@/components/ui/SiedcoAdmin";
 import { fetchCrimeData, LOCALIDADES_LIST } from "@/lib/crimeData";
-import { BOGOTA_LOCALIDADES } from "@/lib/bogotaGeoJson";
 import type { LocalidadData } from "@/types";
 
 interface SiedcoRow {
@@ -60,28 +59,48 @@ export default function DashboardPage() {
       .catch(() => {});
   }, [handleSiedcoUpdate, SIEDCO_SHEETS_URL]);
 
-  const buildDataFromSiedco = useCallback((loc: string, rows: SiedcoRow[]): LocalidadData | null => {
-    const row = rows.find((r) => r.localidad === loc);
-    const geo = BOGOTA_LOCALIDADES.find((l) => l.name === loc);
-    if (!row || !geo) return null;
+  // Centros geográficos correctos por localidad
+  const GEO_CENTERS: Record<string, { center: [number,number]; zoom: number }> = {
+    "Usaquén":        { center: [4.7050, -74.0317], zoom: 13 },
+    "Chapinero":      { center: [4.6490, -74.0630], zoom: 14 },
+    "Santa Fe":       { center: [4.6100, -74.0700], zoom: 14 },
+    "Suba":           { center: [4.7380, -74.0850], zoom: 13 },
+    "Barrios Unidos": { center: [4.6680, -74.0820], zoom: 14 },
+    "Teusaquillo":    { center: [4.6440, -74.0920], zoom: 14 },
+  };
 
-    const total = row.hurto_personas + row.hurto_residencias + row.hurto_autos + row.lesiones + row.violencia;
+  const buildDataFromSiedco = useCallback((loc: string, rows: SiedcoRow[]): LocalidadData | null => {
+    const row = rows.find((r) => String(r.localidad).trim() === loc);
+    if (!row) return null;
+
+    const geo = GEO_CENTERS[loc];
+    if (!geo) return null;
+
+    // Asegurar que los valores son números
+    const hp  = Number(row.hurto_personas)    || 0;
+    const hr  = Number(row.hurto_residencias) || 0;
+    const ha  = Number(row.hurto_autos)       || 0;
+    const lp  = Number(row.lesiones)          || 0;
+    const vi  = Number(row.violencia)         || 0;
+    const total = hp + hr + ha + lp + vi;
+    if (total === 0) return null;
+
     const topCrimes = [
-      { label: "Hurto a personas",        value: Math.round((row.hurto_personas    / total) * 100) },
-      { label: "Hurto a residencias",     value: Math.round((row.hurto_residencias / total) * 100) },
-      { label: "Lesiones personales",     value: Math.round((row.lesiones          / total) * 100) },
-      { label: "Violencia intrafamiliar", value: Math.round((row.violencia         / total) * 100) },
-      { label: "Hurto automotores",       value: Math.round((row.hurto_autos       / total) * 100) },
+      { label: "Hurto a personas",        value: Math.round((hp / total) * 100) },
+      { label: "Hurto a residencias",     value: Math.round((hr / total) * 100) },
+      { label: "Lesiones personales",     value: Math.round((lp / total) * 100) },
+      { label: "Violencia intrafamiliar", value: Math.round((vi / total) * 100) },
+      { label: "Hurto automotores",       value: Math.round((ha / total) * 100) },
     ].sort((a, b) => b.value - a.value);
 
-    // Score basado en total relativo al promedio Bogotá
-    const avgBogota = 8000;
-    const riskScore = Math.min(100, Math.round((total / avgBogota) * 100));
+    // Score: Usaquén tiene ~9000 delitos → 100/100 sería ~15000
+    const avgMax  = 15000;
+    const riskScore = Math.min(100, Math.round((total / avgMax) * 100));
 
     return {
       name:      loc,
-      center:    geo.coords[0] ? [geo.coords[Math.floor(geo.coords.length / 2)][1], geo.coords[Math.floor(geo.coords.length / 2)][0]] : [4.651, -74.098],
-      zoom:      14,
+      center:    geo.center,
+      zoom:      geo.zoom,
       riskScore,
       riskLevel: calcRiskLevel(riskScore),
       topCrimes,
